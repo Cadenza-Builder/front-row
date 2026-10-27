@@ -1,0 +1,19 @@
+{
+  "name": "front-row",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "notes": "tsx --env-file=.env scripts/lecture-run.mts"
+  },
+  "dependencies": {
+    "openai": "^6.22.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.20.0",
+    "typescript": "^5",
+    "vitest": "^4.1.4"
+  }
+}
