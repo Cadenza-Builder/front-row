@@ -13,7 +13,7 @@ export const Notes = z.object({
       // Not .int(): it emits min/max keywords that strict mode may reject; checkSnaps enforces integers.
       snaps: z.array(z.number()),
       // `t` is seconds from lecture start.
-      exam: z.array(z.object({ quote: z.string(), t: z.number() })),
+      exam: z.array(z.object({ quote: z.string().describe("What is examinable, in a short clean statement"), t: z.number() })),
     }),
   ),
   words: z.array(z.object({ term: z.string(), meaning: z.string() })),
@@ -29,11 +29,13 @@ export function checkSnaps(notes: Notes, snapCount: number): Notes {
 const PROMPT =
   "You are the best note-taker in this lecture. Write study notes a student would rather have than a classmate's: " +
   "notes, not a transcript. Organise by topic, explain, and keep every formula, definition and example. " +
-  "Each turn is tagged with `snap` (the board snapshot on screen) and `pointing` (the third of the board the professor stood at); " +
-  'use them to resolve "this", "here" and "that" to the board content they mean. ' +
+  "Each transcript turn is tagged with `snap` (the board snapshot on screen) and `pointing` (the third of the board the professor stood at). " +
+  'Use them silently to work out what "this", "here" and "that" mean, then write it into plain sentences ("The residual plot fans out: ..."). ' +
+  "Never put timestamps, snap numbers, `pointing`, speaker labels or quote = meaning glosses in `body`. " +
   "List a section's board snapshots by index in `snaps`. " +
-  "Put a line in `exam` only when the professor said it is important or will be on the test; quote them, with `t` the turn's start in seconds. " +
-  'Where a stretch of the lecture has no words, say "no speech captured" for it and write from the board. ' +
+  "Add to `exam` only what the professor said is important or will be on the test: `quote` is a short clean statement of what is examinable " +
+  '(e.g. "Spotting heteroskedasticity from a residual plot: on the midterm"), not their words; `t` is that turn\'s start in seconds. ' +
+  'Only when a whole section has no speech, say "no speech captured" once and write it from the board. ' +
   "Write all math as LaTeX in $...$. In `words`, define the course terms used.";
 
 const s = (t: number) => `${Math.round(t)}s`;
@@ -63,9 +65,12 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
 
 /** Plain markdown for the `files.text` row: board markdown stands in for the images. */
 export function toMarkdown(notes: Notes, snaps: Snapshot[]): string {
-  const sections = notes.sections.map((sec) =>
-    [`## ${sec.heading}`, sec.body, ...sec.snaps.map((i) => snaps[i].markdown), ...sec.exam.map((e) => `Exam: ${e.quote}`)].join("\n\n"),
-  );
+  const shown = new Set<number>();
+  const sections = notes.sections.map((sec) => {
+    // Each board snapshot is printed once, at its first reference.
+    const boards = sec.snaps.filter((i) => !shown.has(i) && shown.add(i)).map((i) => snaps[i].markdown);
+    return [`## ${sec.heading}`, sec.body, ...boards, ...sec.exam.map((e) => `Exam: ${e.quote}`)].join("\n\n");
+  });
   const words = notes.words.length ? ["## Terms", notes.words.map((w) => `- **${w.term}**: ${w.meaning}`).join("\n")] : [];
   return [`# ${notes.title}`, notes.summary, ...sections, ...words].join("\n\n") + "\n";
 }
