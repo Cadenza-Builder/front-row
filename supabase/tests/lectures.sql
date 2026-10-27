@@ -41,6 +41,8 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 select pg_temp.expect_error($$insert into public.lectures (course_label, source) values ('ECO101', 'phone')$$, 'permission denied for table lectures');
 select pg_temp.expect_error($$update public.lectures set week_id = 'db000000-0000-0000-0000-00000000000d' where id = 'e0000000-0000-0000-0000-00000000000e'$$, 'permission denied for table lectures');
 select pg_temp.expect_error($$update public.lectures set notes = '{}', status = 'ready'$$, 'permission denied for table lectures');
+-- Nor can it free a lecture another finish holds.
+select pg_temp.expect_error($$update public.lectures set processing_at = null$$, 'permission denied for table lectures');
 -- Recording consent is stamped by the server, never by the browser.
 select pg_temp.expect_error($$update public.profiles set recording_consent_at = now()$$, 'permission denied for table profiles');
 -- Segments carry model output: only the server writes them.

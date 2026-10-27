@@ -9,6 +9,8 @@ create table public.lectures (
   week_id uuid references public.weeks on delete set null,
   source text not null check (source in ('phone', 'room')),
   status text not null default 'recording' check (status in ('recording', 'processing', 'ready', 'failed')),
+  -- When finish took the lecture: a `processing` older than 6 minutes was killed, and Retry takes it over.
+  processing_at timestamptz,
   started_at timestamptz not null default now(),
   duration_s int,
   segment_count int not null default 0,
