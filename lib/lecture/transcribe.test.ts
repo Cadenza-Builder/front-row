@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,6 +51,17 @@ describe("transcribe", () => {
     await expect(
       transcribe(wav, { keywords: [], offset: 0, fetchImpl: async () => new Response("bad", { status: 400 }) }),
     ).rejects.toThrow(/400/);
+  });
+});
+
+describe("meta", () => {
+  it("throws without MODEL_API_KEY instead of caching a keyless client", async () => {
+    vi.resetModules();
+    delete process.env.MODEL_API_KEY;
+    const fresh = (await import("./meta")).meta;
+    expect(() => fresh()).toThrow(/MODEL_API_KEY/);
+    process.env.MODEL_API_KEY = "later-key";
+    expect(fresh().apiKey).toBe("later-key");
   });
 });
 

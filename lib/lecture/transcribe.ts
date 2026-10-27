@@ -1,3 +1,5 @@
+import { metaKey } from "./meta";
+
 /** Seconds from lecture start. */
 export type Turn = { start: number; end: number; text: string };
 
@@ -13,7 +15,7 @@ export async function transcribe(
   form.append("audio", wav, "audio.wav");
   const res = await (opts.fetchImpl ?? fetch)("https://api.meta.ai/v1/asr/transcribe", {
     method: "POST",
-    headers: { Authorization: `Bearer ${process.env.MODEL_API_KEY}`, Accept: "application/json" },
+    headers: { Authorization: `Bearer ${metaKey()}`, Accept: "application/json" },
     body: form,
   });
   if (!res.ok) throw new Error(`transcribe failed: ${res.status} ${await res.text()}`);
