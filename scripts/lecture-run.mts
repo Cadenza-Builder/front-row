@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs, promisify } from "node:util";
-import { imageChanged } from "../lib/lecture/changed";
+import { changeTracker } from "../lib/lecture/changed";
 import { finishLecture, processSegment } from "../lib/lecture/pipeline";
 
 const run = promisify(execFile);
@@ -22,6 +22,7 @@ const keywords = (values.keywords ?? "").split(",").map((k) => k.trim()).filter(
 const dir = await mkdtemp(join(tmpdir(), "lecture-"));
 try {
   const duration = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video])).stdout);
+  if (!(duration > 0)) throw new Error(`ffprobe found no duration in ${video}`);
   await run("ffmpeg", ["-v", "error", "-i", video, "-vf", `fps=1/${EVERY},scale=1280:-2`, join(dir, "f%05d.jpg")]);
   const thumbs = (
     await run("ffmpeg", ["-v", "error", "-i", video, "-vf", `fps=1/${EVERY},scale=32:18,format=gray`, "-f", "rawvideo", "-"], {
@@ -30,12 +31,14 @@ try {
     })
   ).stdout;
   const count = thumbs.length / THUMB;
+  const tracker = changeTracker(); // stateful: called in frame order, before any await
+  const changed = Array.from({ length: count }, (_, i) => tracker(thumbs.subarray(i * THUMB, (i + 1) * THUMB)));
   // shortcut: frame i is taken as t = i × 10 s; fps picks the nearest source frame, within a few seconds.
   const frames = await Promise.all(
     Array.from({ length: count }, async (_, i) => ({
       t: i * EVERY,
       url: `data:image/jpeg;base64,${(await readFile(join(dir, `f${String(i + 1).padStart(5, "0")}.jpg`))).toString("base64")}`,
-      changed: i > 0 && imageChanged(thumbs.subarray((i - 1) * THUMB, i * THUMB), thumbs.subarray(i * THUMB, (i + 1) * THUMB)),
+      changed: changed[i],
     })),
   );
 

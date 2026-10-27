@@ -52,6 +52,16 @@ describe("processSegment", () => {
   });
 });
 
+describe("processSegment later segments", () => {
+  it("processSegment after the first segment reads no board when nothing changed", async () => {
+    vi.mocked(locate).mockResolvedValue({ board, person: null });
+    const still = (t: number) => ({ ...frame(t), changed: false });
+    const out = await processSegment({ wav, offset: 120, frames: [still(120), still(130)], keywords: [] });
+    expect(out.snaps).toEqual([]);
+    expect(readBoard).not.toHaveBeenCalled();
+  });
+});
+
 describe("finishLecture", () => {
   it("finishLecture joins turns across segments", async () => {
     const snap = (t: number): Snapshot => ({ t, url: "", board, markdown: `board ${t}`, alt: "" });

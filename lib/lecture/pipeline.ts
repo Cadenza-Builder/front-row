@@ -20,7 +20,7 @@ export async function processSegment(input: {
   const frames: Frame[] = await Promise.all(
     input.frames.map(async (f) => ({ ...f, ...(await locate(f.url).catch((e) => warn(f.t, "locate", e, { board: null, person: null }))) })),
   );
-  const read = await Promise.all(pickSnapshots(frames).map((f) => readBoard(f).catch((e) => warn(f.t, "readBoard", e, null))));
+  const read = await Promise.all(pickSnapshots(frames, input.offset === 0).map((f) => readBoard(f).catch((e) => warn(f.t, "readBoard", e, null))));
   return { turns, frames, snaps: read.filter((s) => s !== null) };
 }
 

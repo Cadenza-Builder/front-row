@@ -43,8 +43,8 @@ export async function readBoard(frame: Frame & { board: Box }): Promise<Snapshot
   return { t: frame.t, url: frame.url, board: frame.board, markdown, alt };
 }
 
-/** Frames worth reading: the first one with a board, then every board frame that changed. */
-export function pickSnapshots(frames: Frame[]): (Frame & { board: Box })[] {
+/** Frames worth reading: every board frame that changed, plus the first one with a board when `keepFirst` (the lecture's first segment). */
+export function pickSnapshots(frames: Frame[], keepFirst = true): (Frame & { board: Box })[] {
   const withBoard = frames.filter((f): f is Frame & { board: Box } => f.board !== null);
-  return withBoard.filter((f, i) => i === 0 || f.changed);
+  return withBoard.filter((f, i) => (keepFirst && i === 0) || f.changed);
 }

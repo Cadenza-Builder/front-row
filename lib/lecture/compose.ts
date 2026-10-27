@@ -10,7 +10,7 @@ export const Notes = z.object({
     z.object({
       heading: z.string(),
       body: z.string(),
-      // Not .int(): it emits min/max keywords that strict mode may reject; checkSnaps enforces integers.
+      // Not .int(): it emits min/max keywords that strict mode may reject; compose drops non-integers.
       snaps: z.array(z.number()),
       // `t` is seconds from lecture start.
       exam: z.array(z.object({ quote: z.string().describe("What is examinable, in a short clean statement"), t: z.number() })),
@@ -19,12 +19,6 @@ export const Notes = z.object({
   words: z.array(z.object({ term: z.string(), meaning: z.string() })),
 });
 export type Notes = z.infer<typeof Notes>;
-
-export function checkSnaps(notes: Notes, snapCount: number): Notes {
-  for (const s of notes.sections)
-    for (const i of s.snaps) if (!Number.isInteger(i) || i < 0 || i >= snapCount) throw new Error(`snap ${i} out of range (${snapCount} snapshots)`);
-  return notes;
-}
 
 const PROMPT =
   "You are the best note-taker in this lecture. Write study notes a student would rather have than a classmate's: " +
@@ -60,7 +54,10 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
       },
     },
   });
-  return checkSnaps(Notes.parse(JSON.parse(res.output_text)), input.snaps.length);
+  const notes = Notes.parse(JSON.parse(res.output_text));
+  // An invented snapshot index is dropped, never fatal: a lecture with no board must still get notes.
+  for (const sec of notes.sections) sec.snaps = sec.snaps.filter((i) => Number.isInteger(i) && i >= 0 && i < input.snaps.length);
+  return notes;
 }
 
 /** Plain markdown for the `files.text` row: board markdown stands in for the images. */

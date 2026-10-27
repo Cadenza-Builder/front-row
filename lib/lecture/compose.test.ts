@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "./board";
 import type { Box } from "./locate";
 import { meta } from "./meta";
-import { checkSnaps, compose, toMarkdown, type Notes } from "./compose";
+import { compose, toMarkdown, type Notes } from "./compose";
 
 const board: Box = { x1: 0, y1: 70, x2: 1010, y2: 576, w: 1280, h: 720 };
 const snap = (t: number, markdown: string): Snapshot => ({ t, url: `f${t}.jpg`, board, markdown, alt: "board" });
@@ -17,14 +17,6 @@ const notes = (snaps: number[]): Notes => ({
 beforeEach(() => {
   process.env.MODEL_API_KEY = "test-key";
   vi.restoreAllMocks();
-});
-
-describe("checkSnaps", () => {
-  it("checkSnaps throws on an index out of range", () => {
-    expect(() => checkSnaps(notes([5]), 2)).toThrow();
-    expect(() => checkSnaps(notes([0.5]), 2)).toThrow();
-    expect(checkSnaps(notes([1]), 2)).toEqual(notes([1]));
-  });
 });
 
 describe("toMarkdown", () => {
@@ -82,8 +74,9 @@ describe("compose", () => {
     expect(out).toEqual(notes([0]));
   });
 
-  it("compose rejects notes that point at a snapshot that does not exist", async () => {
-    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([3])) } as never);
-    await expect(compose({ turns: [], snaps: [snap(30, "$x$")], course: "PHY131", context: "" })).rejects.toThrow();
+  it("compose drops out-of-range snap indexes", async () => {
+    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([3, 0, 0.5, -1])) } as never);
+    const out = await compose({ turns: [], snaps: [snap(30, "$x$")], course: "PHY131", context: "" });
+    expect(out.sections[0].snaps).toEqual([0]);
   });
 });
