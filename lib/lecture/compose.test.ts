@@ -52,7 +52,7 @@ describe("compose", () => {
       prompt = body.input[0].content[0].text;
       return { output_text: JSON.stringify(notes([])) };
     }) as never);
-    await compose({ turns: [], snaps: [], course: "ECO220", context: "" });
+    await compose({ turns: [], snaps: [], course: "ECO220", context: "", keywords: [] });
     expect(prompt).toContain("Never put timestamps, snap numbers, `pointing`");
     expect(prompt).toContain("short clean statement of what is examinable");
     expect(prompt).toContain('Only when a whole section has no speech, say "no speech captured"');
@@ -69,14 +69,78 @@ describe("compose", () => {
       expect(prompt).not.toContain("x".repeat(20_001));
       return { output_text: JSON.stringify(notes([0])) };
     }) as never);
-    const out = await compose({ turns: [], snaps: [snap(30, "$$E = mc^2$$")], course: "PHY131", context: "x".repeat(30_000) });
+    const out = await compose({ turns: [], snaps: [snap(30, "$$E = mc^2$$")], course: "PHY131", context: "x".repeat(30_000), keywords: [] });
     expect(create).toHaveBeenCalledOnce();
     expect(out).toEqual(notes([0]));
   });
 
   it("compose drops out-of-range snap indexes", async () => {
     vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([3, 0, 0.5, -1])) } as never);
-    const out = await compose({ turns: [], snaps: [snap(30, "$x$")], course: "PHY131", context: "" });
+    const out = await compose({ turns: [], snaps: [snap(30, "$x$")], course: "PHY131", context: "", keywords: [] });
     expect(out.sections[0].snaps).toEqual([0]);
+  });
+
+  it("compose sends the keywords and the misheard-term and [inaudible] rules", async () => {
+    let prompt = "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
+      prompt = body.input[0].content[0].text;
+      return { output_text: JSON.stringify(notes([])) };
+    }) as never);
+    await compose({ turns: [], snaps: [], course: "ECO220", context: "", keywords: ["heteroskedasticity", "OLS"] });
+    expect(prompt).toContain("heteroskedasticity, OLS");
+    expect(prompt).toContain("misheard");
+    expect(prompt).toContain("[inaudible]");
+  });
+
+  it("compose asks for boxes and together in a strict-safe schema", async () => {
+    let body: { input: { content: { text: string }[] }[]; text: { format: { schema: unknown } } } | undefined;
+    vi.spyOn(meta().responses, "create").mockImplementation((async (b: never) => {
+      body = b;
+      return { output_text: JSON.stringify(notes([])) };
+    }) as never);
+    await compose({ turns: [], snaps: [], course: "ECO220", context: "", keywords: [] });
+    const schema = JSON.stringify(body!.text.format.schema);
+    // Strict mode: every key required, no oneOf/tuples/length keywords.
+    expect(schema).toContain('"required":["heading","body","snaps","exam","boxes"]');
+    expect(schema).toMatch(/"required":\["title","summary","sections","words","together"\]/);
+    expect(schema).not.toMatch(/oneOf|prefixItems|minLength|minItems|maxLength/);
+    const prompt = body!.input[0].content[0].text;
+    expect(prompt).toContain("Common mistake");
+    expect(prompt).toContain("`together`");
+  });
+
+  it("compose drops malformed boxes and an empty together, never throws", async () => {
+    const good = [
+      { kind: "formula", tex: "E = mc^2", symbols: [{ sym: "c", meaning: "speed of light" }] },
+      { kind: "example", question: "2+2?", steps: ["add"], answer: "4" },
+      { kind: "graph", title: "Residuals", x: "fitted", y: "residual", series: [{ label: "obs", points: [[1, 2], [3, -1]] }] },
+      { kind: "mistake", text: "Reading a fan as a curve." },
+    ];
+    const bad = [
+      { kind: "table", rows: [] },
+      { kind: "mistake", text: "  " },
+      { kind: "formula", tex: "", symbols: [] },
+      { kind: "example", question: "q", steps: [], answer: "a" },
+      { kind: "graph", title: "t", x: "x", y: "y", series: [] },
+      { kind: "graph", title: "t", x: "x", y: "y", series: [{ label: "s", points: [] }] },
+      { kind: "graph", title: "t", x: "x", y: "y", series: [{ label: "s", points: [[1, 2, 3]] }] },
+      { kind: "graph", title: "t", x: "x", y: "y", series: [{ label: "s", points: [[1, "INF"]] }] },
+      null,
+    ];
+    const n = { ...notes([]), together: "" } as Record<string, unknown>;
+    n.sections = [{ ...notes([]).sections[0], boxes: [...bad.slice(0, 4), ...good, ...bad.slice(4)] }];
+    // 1e999 parses to Infinity: a non-finite point.
+    const text = JSON.stringify(n).replace('"INF"', "1e999");
+    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: text } as never);
+    const out = await compose({ turns: [], snaps: [], course: "PHY131", context: "", keywords: [] });
+    expect(out.sections[0].boxes).toEqual(good);
+    expect(out).not.toHaveProperty("together");
+  });
+
+  it("compose keeps a written together", async () => {
+    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify({ ...notes([]), together: "It all ties up." }) } as never);
+    const out = await compose({ turns: [], snaps: [], course: "PHY131", context: "", keywords: [] });
+    expect(out.together).toBe("It all ties up.");
   });
 });

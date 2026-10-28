@@ -162,7 +162,7 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
       : [];
     // RLS: the student's own files of the week, or a class week's material. Compose reads the first 20k.
     const context = files.filter((f) => f.origin !== "lecture").map((f) => f.text?.slice(0, 20_000)).join("\n\n");
-    const { notes, snaps, markdown } = await finishLecture(segments, lecture.course_label, context);
+    const { notes, snaps, markdown } = await finishLecture(segments, lecture.course_label, context, week?.keywords ?? []);
 
     if (week) {
       const name = `Lecture · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Toronto" })}`;

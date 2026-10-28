@@ -48,8 +48,29 @@ describe("readBoard", () => {
       expect(image).toEqual({ type: "input_image", image_url: "f5.jpg" });
       return { output_text: JSON.stringify({ markdown: "$E = mc^2$", alt: "Einstein's equation" }) };
     }) as never);
-    const snap = await readBoard(frame(5, board, true) as Frame & { board: Box });
+    const snap = await readBoard(frame(5, board, true) as Frame & { board: Box }, []);
     expect(create).toHaveBeenCalledOnce();
     expect(snap).toEqual({ t: 5, url: "f5.jpg", board, markdown: "$E = mc^2$", alt: "Einstein's equation" });
+  });
+
+  it("readBoard carries the turns near the frame and the [unreadable] rule", async () => {
+    let prompt = "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
+      prompt = body.input[0].content[0].text;
+      return { output_text: JSON.stringify({ markdown: "$x$", alt: "x" }) };
+    }) as never);
+    const turns = [
+      { start: 0, end: 5, text: "FAR-BEFORE" },
+      { start: 70, end: 80, text: "sigma squared over n" },
+      { start: 100, end: 104, text: "NEAR-AFTER" },
+      { start: 200, end: 210, text: "FAR-AFTER" },
+    ];
+    await readBoard(frame(90, board, true) as Frame & { board: Box }, turns);
+    expect(prompt).toContain("sigma squared over n");
+    expect(prompt).toContain("NEAR-AFTER");
+    expect(prompt).not.toContain("FAR-BEFORE");
+    expect(prompt).not.toContain("FAR-AFTER");
+    expect(prompt).toContain("[unreadable]");
   });
 });
