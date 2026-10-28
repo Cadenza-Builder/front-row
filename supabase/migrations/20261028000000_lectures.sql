@@ -1,10 +1,33 @@
 -- Front Row: a lecture recorded on a phone becomes notes. The server (admin client) writes the lecture, each segment's
 -- model output and the finished notes file; the browser only reads them, deletes a lecture and uploads its own audio.
+
+-- A Front Row course is just a name (spec, "Front Row build decisions"), apart from Cadenza's courses. The browser
+-- reads, adds and renames it; a syllabus, if read, fills `meets` ([{weekday 0-6, minutes after midnight}]) and
+-- `keywords` for the pipeline.
+create table public.lecture_courses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  name text not null check (char_length(name) between 1 and 200),
+  meets jsonb check (meets is null or jsonb_typeof(meets) = 'array'),
+  -- The browser writes these under own_rows and they go into every Meta call for the course's lectures.
+  keywords text[] not null default '{}' check (cardinality(keywords) <= 100 and char_length(array_to_string(keywords, '')) <= 8000),
+  created_at timestamptz not null default now()
+);
+alter table public.lecture_courses enable row level security;
+create policy own_rows on public.lecture_courses for all to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+-- No delete from the browser: the cascade would drop its lectures and leave their audio and frames in storage.
+revoke delete on public.lecture_courses from anon, authenticated;
+create index on public.lecture_courses (user_id);
+
 create table public.lectures (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
-  course_label text not null,
-  -- Optional: a lecture works without a Cadenza course, and outlives a deleted one.
+  lecture_course_id uuid not null references public.lecture_courses on delete cascade,
+  -- "Lecture N": the course's highest number + 1 at create. `title` is notes.title at finish, or the student's rename.
+  number int not null,
+  title text check (char_length(title) <= 200),
+  -- Set only by Add to Cadenza (the link route): the Cadenza week the notes file went into. Outlives a deleted one.
   course_id uuid references public.courses on delete set null,
   week_id uuid references public.weeks on delete set null,
   source text not null check (source in ('phone', 'room')),
@@ -22,18 +45,20 @@ create table public.lectures (
 );
 alter table public.lectures enable row level security;
 -- The browser reads and deletes its own lectures and never writes one: the API routes create and update them with
--- the admin client after checking the week through RLS, so a lecture cannot point into another student's week.
+-- the admin client after checking its course (and, for Add to Cadenza, the week) through RLS, so a lecture cannot
+-- point into another student's course or week.
 create policy own_rows_read on public.lectures for select to authenticated using ((select auth.uid()) = user_id);
 create policy own_rows_delete on public.lectures for delete to authenticated using ((select auth.uid()) = user_id);
 revoke insert, update on public.lectures from anon, authenticated;
 create index on public.lectures (user_id);
+create index on public.lectures (lecture_course_id);
 create index on public.lectures (course_id);
 create index on public.lectures (week_id);
 create index on public.lectures (file_id);
 
 create table public.lecture_segments (
   lecture_id uuid references public.lectures on delete cascade,
-  user_id uuid not null default auth.uid(),
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
   n int,
   status text check (status in ('uploaded', 'done', 'failed')),
   result jsonb,
@@ -77,4 +102,4 @@ create policy lectures_remove on storage.objects for delete to authenticated
 --   alter table public.files drop constraint files_origin_check,
 --     add constraint files_origin_check check (origin in ('upload', 'drive', 'onedrive', 'canvas', 'ai'));
 --   alter table public.profiles drop column recording_consent_at;
---   drop table public.lecture_segments; drop table public.lectures;
+--   drop table public.lecture_segments; drop table public.lectures; drop table public.lecture_courses;
