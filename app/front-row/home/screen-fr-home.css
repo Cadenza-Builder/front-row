@@ -8,7 +8,7 @@ html.fr-big{font-size:125%}
 .s-fr-home .bar{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4) var(--gutter)}
 .s-fr-home .logo{display:flex;align-items:center;gap:var(--space-3);margin-right:auto;font-weight:700;font-size:1.25rem}
 .s-fr-home .logo img{width:32px;height:32px}
-.s-fr-home .btn-round{display:grid;place-items:center;min-width:56px;height:56px;padding:0 var(--space-4);border:0;border-radius:var(--r-pill);background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--bone);font:inherit;font-size:1.125rem;font-weight:700;cursor:pointer}
+.s-fr-home .btn-round{display:grid;place-items:center;min-width:64px;height:64px;padding:0 var(--space-4);border:0;border-radius:var(--r-pill);background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--bone);font:inherit;font-size:1.125rem;font-weight:700;cursor:pointer}
 .s-fr-home .btn-round[aria-pressed="true"]{background:var(--bone);color:var(--ink-0)}
 .s-fr-home main{padding:var(--space-6) var(--gutter) 9rem}
 .s-fr-home .wrap{display:grid;gap:var(--space-12)}
@@ -27,7 +27,7 @@ html.fr-big{font-size:125%}
 .s-fr-home .chip input{position:absolute;opacity:0;width:1px;height:1px}
 .s-fr-home .chip:has(:checked){background:var(--bone);color:var(--ink-0)}
 .s-fr-home .chip:has(:focus-visible){outline:3px solid var(--amber);outline-offset:3px}
-.s-fr-home .other{justify-self:start;min-height:56px;padding:0;border:0;background:none;color:var(--bone);font:inherit;font-size:1.125rem;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+.s-fr-home .other{justify-self:start;min-height:64px;padding:0;border:0;background:none;color:var(--bone);font:inherit;font-size:1.125rem;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
 .s-fr-home .rows{display:grid;gap:var(--space-3)}
 .s-fr-home .row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-6);align-items:center;min-height:112px;padding:var(--space-4) var(--space-6);border-radius:var(--r-2xl);background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--hair-strong);color:var(--bone)}
 .s-fr-home .row b{display:block;font-size:1.625rem;letter-spacing:-.02em}

@@ -4,6 +4,8 @@ import { fakeDb } from "@/lib/canvas/fakeDb";
 
 const h = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock("@/lib/supabase/server", () => ({ getUser: async () => ({ supabase: h.db, userId: "00000000-0000-4000-8000-0000000000a1" }) }));
+// The course is written as the server (the browser cannot write lecture_courses).
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.db }));
 
 import { POST } from "./route";
 

@@ -14,7 +14,7 @@ export const metadata = { title: "Lecture Notes" };
 /** One lecture: Wait while its notes are written, Read once they are. The browser reads only its own (RLS). */
 export default async function LecturePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { supabase, userId } = await getUser();
-  if (!userId) redirect("/sign-in");
+  if (!userId) redirect("/sign-in?from=front-row");
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   if (!z.uuid().safeParse(id).success) notFound();
   const [{ data: lec }, { data: segs }] = await Promise.all([
@@ -50,6 +50,7 @@ export default async function LecturePage({ params, searchParams }: { params: Pr
         id,
         course: name,
         number: lec.number,
+        date,
         label: [name, `Lecture ${lec.number}`, date, `${Math.round(seconds / 60)} min`].filter(Boolean).join(" · "),
         seconds,
         // The student's rename wins over the title the notes gave themselves.

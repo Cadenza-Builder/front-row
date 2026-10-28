@@ -33,12 +33,15 @@ const seed = () => ({
 
 beforeEach(() => h.create.mockReset());
 
-test("create adds the caller's course by name", async () => {
-  const { db, tables } = fakeDb(seed());
-  const out = await createCourse(db, ME, { name: "  BIO120 " });
+test("create adds the caller's course by name, as the server (the browser cannot write courses)", async () => {
+  const student = fakeDb(seed());
+  const admin = fakeDb(seed());
+  h.admin = admin.db;
+  const out = await createCourse(ME, { name: "  BIO120 " });
   expect(out).toEqual({ code: 201, body: { id: expect.any(String), name: "BIO120" } });
-  expect(tables.lecture_courses.at(-1)).toMatchObject({ user_id: ME, name: "BIO120" });
-  expect((await createCourse(db, ME, { name: " " })).code).toBe(400);
+  expect(admin.tables.lecture_courses.at(-1)).toMatchObject({ user_id: ME, name: "BIO120" });
+  expect(student.tables.lecture_courses).toHaveLength(3);
+  expect((await createCourse(ME, { name: " " })).code).toBe(400);
 });
 
 test("the list is the caller's courses, last used first, with the last lecture and the usual slot", async () => {
@@ -57,14 +60,16 @@ test("the list is the caller's courses, last used first, with the last lecture a
 
 const file = (text: string | Uint8Array<ArrayBuffer>, name: string) => new File([text], name);
 
-test("a syllabus fills the course's meeting times and keywords", async () => {
-  const { db, tables } = fakeDb(seed());
-  h.admin = db;
+test("a syllabus fills the course's meeting times and keywords, written as the server", async () => {
+  const { db, tables: mine } = fakeDb(seed());
+  const { db: admin, tables } = fakeDb(seed());
+  h.admin = admin;
   h.create.mockResolvedValue({ output_text: JSON.stringify({ meets: [{ weekday: 2, minutes: 600 }, { weekday: 9, minutes: 5000 }], keywords: [" OLS ", "", "residual"] }) });
   const out = await readSyllabus(db, ME, ECO, file("ECO220. Lectures Tuesdays 10:00. Topics: OLS, residuals.", "syllabus.txt"));
   // Out-of-range times and blank keywords from the model are dropped.
   expect(out).toEqual({ code: 200, body: { meets: [{ weekday: 2, minutes: 600 }], keywords: ["OLS", "residual"] } });
   expect(tables.lecture_courses[0]).toMatchObject({ meets: [{ weekday: 2, minutes: 600 }], keywords: ["OLS", "residual"] });
+  expect(mine.lecture_courses[0].keywords).toEqual(["heteroskedasticity"]);
   expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ model: "muse-spark-1.3" }));
   expect(JSON.stringify(h.create.mock.calls[0][0])).toContain("Lectures Tuesdays 10:00");
 });

@@ -10,7 +10,8 @@ import type { Database } from "@/lib/supabase/types";
 import { startRun } from "./store";
 import { usualSlot } from "./usualSlot";
 
-// Front Row courses: just a name, owned by the browser under RLS (own_rows), plus what an optional syllabus fills in.
+// Front Row courses: just a name, plus what an optional syllabus fills in. The browser only reads them (RLS); these
+// write them with the admin client, the caller's user_id set and filtered.
 
 type Db = SupabaseClient<Database>;
 type Reply = { code: number; body: Record<string, unknown> };
@@ -21,10 +22,10 @@ const Syllabus = z.object({
   keywords: z.array(z.string()).describe("Course terms a transcriber could mishear: names, jargon, acronyms, as the syllabus spells them"),
 });
 
-export async function createCourse(supabase: Db, userId: string, input: unknown): Promise<Reply> {
+export async function createCourse(userId: string, input: unknown): Promise<Reply> {
   const parsed = Create.safeParse(input);
   if (!parsed.success) return { code: 400, body: { error: "Send a course name." } };
-  const { data } = await supabase.from("lecture_courses").insert({ user_id: userId, name: parsed.data.name }).select("id, name").single().throwOnError();
+  const { data } = await createAdminClient().from("lecture_courses").insert({ user_id: userId, name: parsed.data.name }).select("id, name").single().throwOnError();
   return { code: 201, body: { id: data.id, name: data.name } };
 }
 
@@ -96,7 +97,7 @@ export async function readSyllabus(supabase: Db, userId: string, id: string, fil
     // The model's numbers are checked, never trusted: a time outside the week is dropped.
     const meets = out.meets.filter((m) => Number.isInteger(m.weekday) && m.weekday >= 0 && m.weekday <= 6 && Number.isInteger(m.minutes) && m.minutes >= 0 && m.minutes < 1440);
     const keywords = [...new Set(out.keywords.map((k) => k.trim().slice(0, 80)).filter(Boolean))].slice(0, 100);
-    await supabase.from("lecture_courses").update({ meets: meets.length ? meets : null, keywords }).eq("id", id).eq("user_id", userId).throwOnError();
+    await admin.from("lecture_courses").update({ meets: meets.length ? meets : null, keywords }).eq("id", id).eq("user_id", userId).throwOnError();
     await admin.from("runs").update({ status: "done", finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
     return { code: 200, body: { meets: meets.length ? meets : null, keywords } };
   } catch (err) {

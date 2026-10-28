@@ -55,6 +55,42 @@
   .addto>p:first-child span{color:var(--ash);font-size:.875rem}
   .addto select{min-height:48px;padding:0 var(--space-3);border-radius:var(--r-lg);background:var(--ink-2);color:var(--bone);border:0;box-shadow:inset 0 0 0 1px var(--hair-strong);font:inherit}
   .addto .cap{justify-content:flex-end}
+
+  /* This Lecture (manage-c.html, take C · Lecture Sheet): the "…" beside the title opens rename and delete. */
+  .ttl{display:flex;align-items:flex-start;gap:var(--space-4)}
+  .ttl h1{flex:1;min-width:0}
+  .more{display:grid;place-items:center;flex:none;width:64px;height:64px;border:0;border-radius:50%;background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--bone);cursor:pointer}
+  .more .ic{width:28px;height:28px}
+  .more:hover{background:var(--ink-2)}
+  #lect{width:min(36rem,calc(100vw - 2*var(--gutter)));max-width:none;margin:auto;padding:var(--space-8);border:0;border-radius:var(--r-3xl);color:var(--bone);font-size:1.25rem}
+  /* Wesley 2026-10-28: both delete buttons red with a black label (black reads better on the red than white). */
+  .cz-btn--danger,.ask .cz-btn--danger{background:var(--rose);color:#000;box-shadow:none}
+  #lect::backdrop{background:color-mix(in srgb,var(--ink-0) 75%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  #lect h2{font-size:clamp(2rem,4vw,2.5rem);letter-spacing:-.04em;line-height:1.05;margin-top:var(--space-2)}
+  #lect .fld{display:grid;gap:var(--space-2);margin-top:var(--space-6)}
+  #lect .fld span{color:var(--ash)}
+  #lect .cz-field{min-height:64px;font-size:1.25rem}
+  #lect .hint{font-size:1.25rem;margin-top:var(--space-2)}
+  #lect .when{color:var(--ash)}
+  #lect .held{display:grid;margin:var(--space-6) 0 0;padding:0;list-style:none}
+  #lect .held li{display:flex;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) 0;border-top:1px solid var(--hair-strong)}
+  #lect .held b{font-weight:500;color:var(--ash);font-variant-numeric:tabular-nums}
+  #lect .acts{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)}
+  #lect .acts .cz-btn{flex:1;min-height:64px;font-size:1.25rem;padding:0 var(--space-6);gap:var(--space-2)}
+  @media (max-width:640px){
+    #lect{width:100%;margin:auto 0 0;padding:var(--space-6) var(--gutter) var(--space-8);border-radius:var(--r-3xl) var(--r-3xl) 0 0}
+    #lect .acts{flex-direction:column-reverse}
+  }
+  /* The house confirm (globals dialog.ask) sized for Front Row: 20px text, 64px targets, amber focus (stage.css). */
+  dialog.ask.lv{width:min(34rem,calc(100vw - 2*var(--gutter)));font-size:1.25rem}
+  .lv h2{font-size:clamp(2rem,4vw,2.5rem);letter-spacing:-.04em;line-height:1.05}
+  .lv p{color:var(--ash);margin-top:var(--space-4)}
+  .lv p b{color:var(--bone);font-weight:500}
+  .lv ul{font-size:1.25rem;color:var(--bone)}
+  .lv li{grid-template-columns:24px minmax(0,1fr);align-items:center}
+  .lv li .ic{width:24px;height:24px}
+  .lv .cz-btn,.lv .cz-field{min-height:64px;font-size:1.25rem}
+  :focus-visible{outline:3px solid var(--amber);outline-offset:3px}
 }
 
 .fr-wait{

@@ -93,13 +93,19 @@ test("delete of another student's lecture returns 404 and removes nothing", asyn
   expect(db.tables.lectures).toHaveLength(2);
 });
 
-test("delete removes the lecture's objects, its notes file and the row", async () => {
-  const db = use(fakeClient(seed(), [`${ME}/${LEC}/0.wav`, `${ME}/${LEC}/0-10.jpg`, `${ME}/other/0.wav`]));
-  expect((await deleteLecture(db.client, ME, LEC)).code).toBe(200);
-  expect(db.bucket.remove).toHaveBeenCalledWith([`${ME}/${LEC}/0.wav`, `${ME}/${LEC}/0-10.jpg`]);
-  expect([...db.stored]).toEqual([`${ME}/other/0.wav`]);
-  expect(db.tables.files).toEqual([]);
-  expect(db.tables.lectures.map((l) => l.id)).toEqual([FOREIGN]);
+test("delete removes the lecture's objects and row as the server (the browser may not); its copy in a Cadenza week stays", async () => {
+  const objs = [`${ME}/${LEC}/0.wav`, `${ME}/${LEC}/0-10.jpg`, `${ME}/other/0.wav`];
+  const student = fakeClient(seed(), objs);
+  const admin = use(fakeClient(seed(), objs));
+  expect((await deleteLecture(student.client, ME, LEC)).code).toBe(200);
+  expect(student.bucket.remove).not.toHaveBeenCalled();
+  expect(admin.bucket.remove).toHaveBeenCalledWith([`${ME}/${LEC}/0.wav`, `${ME}/${LEC}/0-10.jpg`]);
+  expect([...admin.stored]).toEqual([`${ME}/other/0.wav`]);
+  expect(admin.tables.lectures.map((l) => l.id)).toEqual([FOREIGN]);
+  expect(student.tables.lectures).toHaveLength(2);
+  // The delete sheet promises "The copy in <week> stays": the Add to Cadenza file is not touched.
+  expect(student.tables.files).toHaveLength(1);
+  expect(admin.tables.files).toHaveLength(1);
 });
 
 test("rename sets the title of the caller's lecture only", async () => {

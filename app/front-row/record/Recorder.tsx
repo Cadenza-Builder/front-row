@@ -399,7 +399,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
       r.stopped = true;
       if (r.count) cut();
       release();
-      if (!r.n) return setError("No sound was recorded, so there are no notes to write. Allow the microphone for this site, then record again.");
+      if (!r.n) {
+        // Board photos still uploading land first, so the delete takes them; after it the storage lock refuses any straggler.
+        void Promise.allSettled([...r.frames.values()].flat()).then(() => fetch(`/api/lectures/${r.id}`, { method: "DELETE" })).catch(() => {});
+        return setError("No sound was recorded, so nothing was kept. Allow the microphone for this site, then record again.");
+      }
     }
     setError(null);
     upload();

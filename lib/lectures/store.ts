@@ -8,8 +8,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { notesDocx, notesPdf } from "./export";
 
-// Front Row's Cadenza glue (docs/superpowers/plans/2026-10-27-lecture-notes.md, Task 7). The browser can only read and
-// delete its lectures, so every lecture and segment write is the admin client's, with the caller's user_id set and
+// Front Row's Cadenza glue (docs/superpowers/plans/2026-10-27-lecture-notes.md, Task 7). The browser can only read its
+// lectures, so every lecture and segment write (and delete) is the admin client's, with the caller's user_id set and
 // filtered, after an RLS read of the lecture, its Front Row course, or (Add to Cadenza) the week. Storage paths are
 // always built here: `${userId}/${lectureId}/…`.
 
@@ -182,15 +182,16 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
 export async function deleteLecture(supabase: Db, userId: string, id: string): Promise<Reply> {
   const lecture = await load(supabase, userId, id);
   if (!lecture) return NOT_FOUND;
+  // The browser cannot delete a lecture, so its files never outlive it: they go first, then the row, as the server.
+  const admin = createAdminClient();
   const dir = `${userId}/${id}`;
-  const names = await listAll(supabase, dir);
+  const names = await listAll(admin, dir);
   if (names.length) {
-    const { error } = await supabase.storage.from("lectures").remove(names.map((n) => `${dir}/${n}`));
+    const { error } = await admin.storage.from("lectures").remove(names.map((n) => `${dir}/${n}`));
     if (error) throw error;
   }
-  // The student's own client: files and lectures both let their owner delete.
-  if (lecture.file_id) await supabase.from("files").delete().eq("id", lecture.file_id).eq("user_id", userId).eq("origin", "lecture").throwOnError();
-  await supabase.from("lectures").delete().eq("id", id).eq("user_id", userId).throwOnError();
+  // The Add to Cadenza copy is a file in the student's week: it stays, as the delete sheet says.
+  await admin.from("lectures").delete().eq("id", id).eq("user_id", userId).throwOnError();
   return { code: 200, body: {} };
 }
 

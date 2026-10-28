@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { supabase, userId } = await getUser();
+  const { userId } = await getUser();
   if (!frontRowOpen(userId ?? undefined)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // JSON only: a cross-site form can post text/plain without a preflight.
@@ -30,6 +30,6 @@ export async function POST(request: Request) {
   try {
     body = JSON.parse(raw);
   } catch {}
-  const out = await createCourse(supabase, userId, body);
+  const out = await createCourse(userId, body);
   return NextResponse.json(out.body, { status: out.code });
 }

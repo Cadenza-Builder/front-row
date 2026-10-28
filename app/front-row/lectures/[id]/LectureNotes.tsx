@@ -18,8 +18,10 @@ export type Lecture = {
   id: string | null;
   course: string;
   number: number | null;
-  /** "ECO220 · Lecture 9 · Mon Oct 27 · 52 min" */
+  /** "ECO220 · Lecture 9 · Tue Oct 27 · 52 min" */
   label: string;
+  /** "Tue Oct 27" */
+  date: string;
   seconds: number;
   notes: Notes;
   shots: Shot[];
@@ -30,6 +32,9 @@ export type Lecture = {
 
 export const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const paras = (text: string) => text.split(/\n{2,}/).map((p, i) => <p key={i}><MathText text={p} /></p>);
+const MORE = <svg className="ic" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="3.2" /></svg>;
+const BIN = <svg className="ic" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>;
+const GONE = <svg className="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>;
 const PHOTO = <svg className="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="10" r="1.5" /><path d="M21 16l-5-5-8 8" /></svg>;
 
 /** The board region SAM found, cut from its frame (the viewBox is the box, the image the whole frame); no box: the frame. */
@@ -69,6 +74,7 @@ function BoxView({ b }: { b: NoteBox }) {
             })}
           </ol>
           <p className="ans"><span className="label">Answer</span><span><MathText text={b.answer} /></span></p>
+          {b.check && <p className="vfy"><MathText text={b.check} /></p>}
         </div>
       );
     case "graph":
@@ -78,6 +84,7 @@ function BoxView({ b }: { b: NoteBox }) {
           <p className="graph__t"><MathText text={b.title} /></p>
           <Scatter {...b} w={320} h={220} cls="g-n" />
           <Scatter {...b} w={720} h={240} cls="g-w" />
+          {b.caption && <figcaption className="hint"><MathText text={b.caption} /></figcaption>}
         </figure>
       );
     case "mistake":
@@ -105,6 +112,11 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
   const save = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
   const [view, setView] = useState<number | "add" | null>(null);
+  const lect = useRef<HTMLDialogElement>(null);
+  const del = useRef<HTMLDialogElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     const fit = () => fitPairs(root.current);
@@ -154,6 +166,23 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
     <span key="t" className="file"><svg className="ic"><use href="#i-file" /></svg><b>Transcript</b><span>{`${Math.round(L.seconds / 60)} min`}</span></span>,
   ].filter(Boolean);
   const title = /[.!?]$/.test(notes.title) ? notes.title : `${notes.title}.`;
+  const name = L.number ? `Lecture ${L.number}` : "Lecture";
+  const min = `${Math.round(L.seconds / 60)} min`;
+  const parts = `${n} part${n === 1 ? "" : "s"}`;
+  // The audio is not listed: finish removes it once the notes are saved.
+  const photos = shots.length > 0 && `${shots.length} board photo${shots.length === 1 ? "" : "s"}`;
+  const shut = () => (lect.current?.close(), del.current?.close(), setErr(null));
+  // Rename and delete; the sample's ways out lead to Front Row's front door instead.
+  const call = async (init: RequestInit, then: () => void) => {
+    setBusy(true);
+    setErr(null);
+    const res = await fetch(`/api/lectures/${L.id}`, init).catch(() => null);
+    setBusy(false);
+    if (res?.ok) then();
+    else setErr(((await res?.json().catch(() => null)) as { error?: string } | null)?.error ?? "That did not work. Try again.");
+  };
+  const rename = () => call({ method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: field.current!.value.trim() }) }, () => (shut(), router.refresh()));
+  const drop = () => call({ method: "DELETE" }, () => router.push("/front-row/home"));
 
   return (
     <div className="s-learn fr-read">
@@ -178,7 +207,10 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
       <main className="page" ref={root}>
         <div className="tc-head">
           <p className="label">{L.label}</p>
-          <h1>{L.number && <><span className="light">{`Lecture ${L.number}`}</span> </>}<span className="cz-grad">{title}</span></h1>
+          <div className="ttl">
+            <h1>{L.number && <><span className="light">{`Lecture ${L.number}`}</span> </>}<span className="cz-grad">{title}</span></h1>
+            <button type="button" className="more" aria-label={`${name}: rename or delete`} onClick={() => (setErr(null), lect.current?.showModal(), field.current?.focus())}>{MORE}</button>
+          </div>
           <p className="lead tc-one"><MathText text={notes.summary} /></p>
         </div>
 
@@ -255,6 +287,37 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
           </>
         )}
         {view === "add" && L.id && <AddToCadenza id={L.id} close={() => dlg.current?.close()} done={() => { dlg.current?.close(); router.refresh(); }} />}
+      </dialog>
+
+      <dialog id="lect" className="glass" aria-labelledby="lect-h" ref={lect} onCancel={(e) => (e.preventDefault(), !busy && shut())}>
+        <p className="when">{[L.course, L.number && name, L.date].filter(Boolean).join(" · ")}</p>
+        <h2 id="lect-h"><span className="light">This</span> Lecture</h2>
+        <label className="fld"><span>Title</span><input className="cz-field" ref={field} defaultValue={notes.title} maxLength={200} /></label>
+        <p className="hint">{`Front Row named it from what was taught. ${L.number ? `${name} and the date stay.` : "The date stays."}`}</p>
+        <ul className="held" aria-label="Saved with this lecture">
+          <li>Notes<b>{parts}</b></li><li>Transcript<b>{min}</b></li>{photos && <li>Board photos<b>{shots.length}</b></li>}
+        </ul>
+        {err && <p className="hint err" role="alert">{err}</p>}
+        <div className="acts">
+          <button type="button" className="cz-btn cz-btn--danger" disabled={busy} onClick={() => (setErr(null), del.current?.showModal())}>{BIN}Delete Lecture</button>
+          {L.id ? <button type="button" className="cz-btn" disabled={busy} onClick={rename}>Save Title</button> : <Link className="cz-btn" href="/front-row">Save Title</Link>}
+        </div>
+      </dialog>
+      <dialog className="ask lv" id="del" aria-labelledby="del-h" ref={del} onCancel={(e) => (e.preventDefault(), !busy && shut())}>
+        <h2 id="del-h"><span className="light">Delete</span> {`${name}?`}</h2>
+        <p><b>{notes.title}</b>{`, from ${L.date}. This deletes it for good:`}</p>
+        <ul>
+          <li className="gone">{GONE}{`The notes, ${n === 1 ? parts : `all ${parts}`}`}</li>
+          <li className="gone">{GONE}{`The transcript, ${min}`}</li>
+          {photos && <li className="gone">{GONE}{`The ${photos}`}</li>}
+          {L.linked && <li className="kept"><svg className="ic"><use href="#i-check" /></svg>{`The copy in ${L.linked.label} stays.`}</li>}
+        </ul>
+        <p>You can&apos;t undo this.</p>
+        {err && <p className="hint err" role="alert">{err}</p>}
+        <div className="acts">
+          <button type="button" className="cz-btn cz-btn--ghost" autoFocus disabled={busy} onClick={shut}>Keep Lecture</button>
+          {L.id ? <button type="button" className="cz-btn cz-btn--danger" disabled={busy} onClick={drop}>Delete for Good</button> : <Link className="cz-btn cz-btn--danger" href="/front-row">Delete for Good</Link>}
+        </div>
       </dialog>
     </div>
   );

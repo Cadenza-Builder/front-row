@@ -12,7 +12,7 @@ export default async function RecordPage({ searchParams }: { searchParams: Promi
   const course = typeof sp.course === "string" ? sp.course : null;
   if (sample) return <Recorder course={null} userId={null} sample />;
   const { userId } = await getUser();
-  if (!userId) redirect("/sign-in");
+  if (!userId) redirect("/sign-in?from=front-row");
   if (!course) redirect("/front-row/home");
   return <Recorder course={course} userId={userId} sample={false} />;
 }

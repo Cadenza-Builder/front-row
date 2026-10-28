@@ -9,7 +9,8 @@ export const SAMPLE: Lecture = {
   id: null,
   course: "ECO220",
   number: 9,
-  label: "ECO220 · Lecture 9 · Mon Oct 27 · 52 min",
+  label: "ECO220 · Lecture 9 · Tue Oct 27 · 52 min",
+  date: "Tue Oct 27",
   seconds: 3120,
   linked: null,
   shots: [
@@ -73,6 +74,7 @@ export const SAMPLE: Lecture = {
             question: "The fitted line is $\\hat{y} = 2 + 0.5x$. A student who studied $x = 4$ hours scored $y = 5.5$. What is the residual?",
             steps: ["Put $x = 4$ into the line to get the prediction. $$\\hat{y} = 2 + 0.5(4) = 4$$", "Subtract the prediction from what was observed. $$e = 5.5 - 4 = 1.5$$"],
             answer: "The residual is $1.5$: the student scored 1.5 points above the line.",
+            check: "A positive residual means the point sits above the line.",
           },
         ],
       },
@@ -87,6 +89,7 @@ export const SAMPLE: Lecture = {
           {
             kind: "graph",
             title: "Residuals vs fitted values",
+            caption: "From $\\operatorname{Var}(u \\mid x) = \\sigma^2(x)$. The spread grows with the fitted value: a fan.",
             x: "fitted value",
             y: "residual",
             series: [
