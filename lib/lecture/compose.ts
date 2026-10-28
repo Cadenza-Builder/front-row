@@ -42,13 +42,13 @@ const Section = z.object({
 });
 const Words = z.array(z.object({ term: z.string(), meaning: z.string() }));
 
-/** Read side: `boxes` and `together` are optional so notes stored before them still parse. */
+/** Read side: `boxes` and `together` are optional so notes stored before them still parse; a null from the model counts as absent. */
 export const Notes = z.object({
   title: z.string(),
   summary: z.string(),
-  sections: z.array(Section.extend({ boxes: z.array(z.unknown()).transform(keepBoxes).optional() })),
+  sections: z.array(Section.extend({ boxes: z.array(z.unknown()).nullish().transform((b) => (b ? keepBoxes(b) : undefined)).optional() })),
   words: Words,
-  together: z.string().optional(),
+  together: z.string().nullish().transform((v) => v ?? undefined).optional(),
 });
 export type Notes = z.infer<typeof Notes>;
 

@@ -138,6 +138,15 @@ describe("compose", () => {
     expect(out).not.toHaveProperty("together");
   });
 
+  it("compose survives null boxes and null together (strict mode unproven on Meta)", async () => {
+    const n = { ...notes([]), together: null, sections: [{ ...notes([]).sections[0], boxes: null }] };
+    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(n) } as never);
+    const out = await compose({ turns: [], snaps: [], course: "PHY131", context: "", keywords: [] });
+    expect(out.sections[0].heading).toBe("Mass-energy");
+    expect(out.sections[0].boxes).toBeUndefined();
+    expect(out).not.toHaveProperty("together");
+  });
+
   it("compose keeps a written together", async () => {
     vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify({ ...notes([]), together: "It all ties up." }) } as never);
     const out = await compose({ turns: [], snaps: [], course: "PHY131", context: "", keywords: [] });
