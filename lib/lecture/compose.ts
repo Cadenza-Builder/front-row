@@ -4,12 +4,16 @@ import type { LinkedTurn } from "./link";
 import { meta } from "./meta";
 
 const Formula = z.object({ kind: z.literal("formula"), tex: z.string(), symbols: z.array(z.object({ sym: z.string(), meaning: z.string() })) });
-const Example = z.object({ kind: z.literal("example"), question: z.string(), steps: z.array(z.string()), answer: z.string() });
+// `extra` is the optional line: required-but-nullable on the wire (strict mode), optional on the read side.
+const example = <E extends z.ZodType>(extra: E) =>
+  z.object({ kind: z.literal("example"), question: z.string(), steps: z.array(z.string()), answer: z.string(), check: extra });
 const Mistake = z.object({ kind: z.literal("mistake"), text: z.string() });
-const graph = <P extends z.ZodType>(point: P) =>
-  z.object({ kind: z.literal("graph"), title: z.string(), x: z.string(), y: z.string(), series: z.array(z.object({ label: z.string(), points: z.array(point) })) });
+const graph = <P extends z.ZodType, E extends z.ZodType>(point: P, extra: E) =>
+  z.object({ kind: z.literal("graph"), title: z.string(), caption: extra, x: z.string(), y: z.string(), series: z.array(z.object({ label: z.string(), points: z.array(point) })) });
+// A null or blank caption/check is absent, never a reason to drop the box.
+const line = z.string().nullish().transform((v) => (v?.trim() ? v : undefined)).optional();
 // z.number() refuses Infinity, so a non-finite point fails the parse.
-export const NoteBox = z.discriminatedUnion("kind", [Formula, Example, graph(z.tuple([z.number(), z.number()])), Mistake]);
+export const NoteBox = z.discriminatedUnion("kind", [Formula, example(line), graph(z.tuple([z.number(), z.number()]), line), Mistake]);
 export type NoteBox = z.infer<typeof NoteBox>;
 
 const filled = (...s: string[]) => s.every((x) => x.trim() !== "");
@@ -56,7 +60,7 @@ export type Notes = z.infer<typeof Notes>;
 const Wire = z.object({
   title: z.string(),
   summary: z.string(),
-  sections: z.array(Section.extend({ boxes: z.array(z.union([Formula, Example, graph(z.array(z.number())), Mistake])) })),
+  sections: z.array(Section.extend({ boxes: z.array(z.union([Formula, example(z.string().nullable()), graph(z.array(z.number()), z.string().nullable()), Mistake])) })),
   words: Words,
   together: z.string(),
 });
@@ -76,6 +80,8 @@ const PROMPT =
   "Fill a section's `boxes` only from what was actually taught: a formula box (`tex` without $, each symbol and its meaning) when a formula was written; " +
   "a worked example (`question`, `steps`, `answer`) only when one was worked through; a graph only from real points on the board or said aloud, " +
   "never invented (`title`, axis labels `x` and `y`, each series' `points` as [x, y]); a Common mistake (`text`) only when the professor warned about one. " +
+  "A graph's `caption` is one sentence on what it shows, only when that adds meaning, else null. " +
+  "An example's `check` is a one-line check of the answer (e.g. substituting it back), only when the example has a natural check, else null. " +
   "Most sections have no boxes: leave `boxes` empty. " +
   "In `together`, write a short closing synthesis of how the lecture's ideas connect. " +
   "Write all math as LaTeX in $...$. In `words`, define the course terms used.";
@@ -115,8 +121,28 @@ export function toMarkdown(notes: Notes, snaps: Snapshot[]): string {
   const sections = notes.sections.map((sec) => {
     // Each board snapshot is printed once, at its first reference.
     const boards = sec.snaps.filter((i) => !shown.has(i) && shown.add(i)).map((i) => snaps[i].markdown);
-    return [`## ${sec.heading}`, sec.body, ...boards, ...sec.exam.map((e) => `Exam: ${e.quote}`)].join("\n\n");
+    return [`## ${sec.heading}`, sec.body, ...boards, ...(sec.boxes ?? []).map(boxMarkdown), ...sec.exam.map((e) => `Exam: ${e.quote}`)].join("\n\n");
   });
   const words = notes.words.length ? ["## Terms", notes.words.map((w) => `- **${w.term}**: ${w.meaning}`).join("\n")] : [];
-  return [`# ${notes.title}`, notes.summary, ...sections, ...words].join("\n\n") + "\n";
+  const together = notes.together ? ["## Putting it together", notes.together] : [];
+  return [`# ${notes.title}`, notes.summary, ...sections, ...words, ...together].join("\n\n") + "\n";
+}
+
+// Graph points are not dumped: the title, caption and axes say what the graph is.
+function boxMarkdown(b: NoteBox): string {
+  switch (b.kind) {
+    case "formula":
+      return [`$$${b.tex}$$`, ...(b.symbols.length ? [b.symbols.map((s) => `- $${s.sym}$: ${s.meaning}`).join("\n")] : [])].join("\n\n");
+    case "example":
+      return [
+        `**Worked example:** ${b.question}`,
+        b.steps.map((s, i) => `${i + 1}. ${s}`).join("\n"),
+        `**Answer:** ${b.answer}`,
+        ...(b.check ? [`**Check:** ${b.check}`] : []),
+      ].join("\n\n");
+    case "graph":
+      return [`**Graph: ${b.title}**`, ...(b.caption ? [b.caption] : []), `A graph of ${b.y} against ${b.x}.`].join("\n\n");
+    case "mistake":
+      return `**Common mistake:** ${b.text}`;
+  }
 }

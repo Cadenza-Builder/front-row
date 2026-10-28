@@ -33,6 +33,45 @@ describe("toMarkdown", () => {
   });
 });
 
+describe("toMarkdown boxes", () => {
+  it("toMarkdown output for notes without boxes is unchanged", () => {
+    const md = toMarkdown(notes([1]), [snap(0, "$a$"), snap(30, "$$E = mc^2$$")]);
+    expect(md).toBe(
+      "# Energy\n\nMass and energy are the same thing.\n\n## Mass-energy\n\nEnergy is $E = mc^2$.\n\n$$E = mc^2$$\n\n" +
+        "Exam: This will be on the test.\n\n## Terms\n\n- **rest mass**: mass measured at rest\n",
+    );
+  });
+
+  it("toMarkdown writes all four boxes and together", () => {
+    const n: Notes = { ...notes([]), together: "It all ties up." };
+    n.sections[0].boxes = [
+      { kind: "formula", tex: "E = mc^2", symbols: [{ sym: "c", meaning: "speed of light" }] },
+      { kind: "example", question: "Solve $2x = 4$.", steps: ["Divide by 2."], answer: "$x = 2$", check: "$2 \\cdot 2 = 4$" },
+      { kind: "graph", title: "Residuals", caption: "The spread grows with the fit.", x: "fitted", y: "residual", series: [{ label: "obs", points: [[1, 2]] }] },
+      { kind: "mistake", text: "Reading a fan as a curve." },
+    ];
+    const md = toMarkdown(n, []);
+    expect(md).toContain("$$E = mc^2$$\n\n- $c$: speed of light");
+    expect(md).toContain("**Worked example:** Solve $2x = 4$.\n\n1. Divide by 2.\n\n**Answer:** $x = 2$\n\n**Check:** $2 \\cdot 2 = 4$");
+    expect(md).toContain("**Graph: Residuals**\n\nThe spread grows with the fit.\n\nA graph of residual against fitted.");
+    expect(md).not.toContain("[1,2]");
+    expect(md).toContain("**Common mistake:** Reading a fan as a curve.");
+    expect(md.indexOf("**Common mistake:**")).toBeLessThan(md.indexOf("Exam:"));
+    expect(md.endsWith("## Putting it together\n\nIt all ties up.\n")).toBe(true);
+  });
+
+  it("toMarkdown leaves out a missing check and caption", () => {
+    const n = notes([]);
+    n.sections[0].boxes = [
+      { kind: "example", question: "q", steps: ["s"], answer: "a" },
+      { kind: "graph", title: "T", x: "x", y: "y", series: [{ label: "s", points: [[1, 2]] }] },
+    ];
+    const md = toMarkdown(n, []);
+    expect(md).not.toContain("Check");
+    expect(md).toContain("**Graph: T**\n\nA graph of y against x.");
+  });
+});
+
 describe("toMarkdown repeats", () => {
   it("toMarkdown prints each snapshot once, at its first reference", () => {
     const n = notes([0]);
@@ -105,9 +144,31 @@ describe("compose", () => {
     expect(schema).toContain('"required":["heading","body","snaps","exam","boxes"]');
     expect(schema).toMatch(/"required":\["title","summary","sections","words","together"\]/);
     expect(schema).not.toMatch(/oneOf|prefixItems|minLength|minItems|maxLength/);
+    expect(schema).toContain('"required":["kind","question","steps","answer","check"]');
+    expect(schema).toContain('"required":["kind","title","caption","x","y","series"]');
     const prompt = body!.input[0].content[0].text;
     expect(prompt).toContain("Common mistake");
     expect(prompt).toContain("`together`");
+    expect(prompt).toContain("`caption`");
+    expect(prompt).toContain("`check`");
+  });
+
+  it("compose keeps caption and check, and treats null or blank ones as absent without dropping the box", async () => {
+    const boxes = [
+      { kind: "example", question: "q", steps: ["s"], answer: "a", check: "a works" },
+      { kind: "example", question: "q2", steps: ["s"], answer: "a", check: null },
+      { kind: "graph", title: "T", caption: "  ", x: "x", y: "y", series: [{ label: "s", points: [[1, 2]] }] },
+      { kind: "graph", title: "U", caption: "Rises.", x: "x", y: "y", series: [{ label: "s", points: [[1, 2]] }] },
+    ];
+    const n = { ...notes([]), sections: [{ ...notes([]).sections[0], boxes }] };
+    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(n) } as never);
+    const out = await compose({ turns: [], snaps: [], course: "PHY131", context: "", keywords: [] });
+    const got = out.sections[0].boxes!;
+    expect(got).toHaveLength(4);
+    expect(got[0]).toMatchObject({ check: "a works" });
+    expect(got[1].kind === "example" && got[1].check).toBeUndefined();
+    expect(got[2].kind === "graph" && got[2].caption).toBeUndefined();
+    expect(got[3]).toMatchObject({ caption: "Rises." });
   });
 
   it("compose drops malformed boxes and an empty together, never throws", async () => {
