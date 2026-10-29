@@ -26,7 +26,7 @@ const seed = (consent: string | null = null) => ({
     { id: THEIRS, user_id: OTHER, name: "MAT135", keywords: [], meets: null },
   ],
   lectures: [
-    { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 2, week_id: null, status: "recording", file_id: "f1" },
+    { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 2, week_id: null, status: "recording", file_id: "f1", started_at: "2026-10-28T09:00:00Z" },
     { id: FOREIGN, user_id: OTHER, lecture_course_id: THEIRS, number: 1, week_id: null, status: "recording", file_id: null },
   ],
   files: [{ id: "f1", user_id: ME, week_id: WEEK, origin: "lecture", text: "notes" }],
@@ -171,4 +171,12 @@ test("a segment already sent is not processed again, and its saved result stays"
   expect((await saveSegment(db.client, ME, LEC, "1", { frames: [{ t: 130, changed: true }] })).code).toBe(202);
   expect(h.processSegment).not.toHaveBeenCalled();
   expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ status: "done", result: done })]);
+});
+
+test("a segment later than the lecture has been running is refused before any model call", async () => {
+  const db = use(fakeClient({ ...seed(), lectures: [{ id: LEC, user_id: ME, lecture_course_id: COURSE, number: 2, status: "recording", started_at: new Date(Date.now() - 5 * 60_000).toISOString() }] }));
+  // Five minutes in: segment 2 (4:00-6:00) can be sent, segment 5 (10:00) cannot exist yet.
+  expect((await saveSegment(db.client, ME, LEC, "5", { frames: [] })).code).toBe(400);
+  expect(h.processSegment).not.toHaveBeenCalled();
+  expect(db.tables.lecture_segments ?? []).toEqual([]);
 });

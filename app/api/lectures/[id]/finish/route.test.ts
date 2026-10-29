@@ -22,8 +22,8 @@ function setup(lecture: Record<string, unknown> = {}) {
     {
       lecture_courses: [{ id: COURSE, user_id: ME, name: "ECO101", keywords: ["elasticity"], meets: null }],
       lectures: [
-        { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 1, week_id: null, status: "recording", file_id: null, ...lecture },
-        { id: FOREIGN, user_id: OTHER, lecture_course_id: "theirs", number: 1, week_id: null, status: "recording", file_id: null },
+        { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 1, week_id: null, status: "recording", file_id: null, started_at: "2026-10-28T09:00:00Z", ...lecture },
+        { id: FOREIGN, user_id: OTHER, lecture_course_id: "theirs", number: 1, week_id: null, status: "recording", file_id: null, started_at: "2026-10-28T09:00:00Z" },
       ],
       lecture_segments: [
         { lecture_id: LEC, user_id: ME, n: 0, status: "done", result: DONE },
@@ -74,6 +74,14 @@ test("finish at the daily cap fails before any segment is processed", async () =
   (db.client as { rpc: unknown }).rpc = async () => ({ data: null, error: { message: "daily_run_cap" } });
   expect(await (await post(LEC)).json()).toEqual({ status: "failed", error: "You have hit today's limit, try again tomorrow." });
   expect(h.processSegment).not.toHaveBeenCalled();
+});
+
+test("finish never processes more segments than the lecture has been running", async () => {
+  const db = setup({ started_at: new Date(Date.now() - 3 * 60_000).toISOString() });
+  for (let n = 2; n < 10; n++) db.stored.add(`${ME}/${LEC}/${n}.wav`);
+  await post(LEC, { segmentCount: 180 });
+  // Three minutes in: segments 0 and 1, plus one of slack; 0 is done, so 1 and 2 are processed.
+  expect(h.processSegment).toHaveBeenCalledTimes(2);
 });
 
 test("a closed Front Row is a 404 before anything runs", async () => {

@@ -20,13 +20,15 @@ import { notesDocx, notesPdf } from "./export";
 type Db = SupabaseClient<Database>;
 type Reply = { code: number; body: Record<string, unknown> };
 type Segment = Awaited<ReturnType<typeof processSegment>>;
-type Lecture = { id: string; lecture_course_id: string; number: number; title: string | null; status: string; file_id: string | null };
+type Lecture = { id: string; lecture_course_id: string; number: number; title: string | null; status: string; file_id: string | null; started_at: string };
 
 const SEG = 120; // seconds per segment, as the recorder cuts them
 const MAX_SEGMENTS = 180; // six hours
 const STALE_MS = 6 * 60_000; // past maxDuration: a finish still processing after this was killed
 const NOT_FOUND: Reply = { code: 404, body: { error: "Lecture not found." } };
 const bad = (error: string): Reply => ({ code: 400, body: { error } });
+/** The last segment a lecture can have reached by now, a minute of clock slack included: one run never pays for 180 at once. */
+const lastSegment = (l: Lecture) => Math.floor(((Date.now() - Date.parse(l.started_at)) / 1000 + 60) / SEG);
 
 const Create = z.strictObject({ lectureCourseId: z.uuid(), source: z.enum(["phone", "room"]), consent: z.literal(true).optional() });
 const Rename = z.strictObject({ title: z.string().trim().min(1).max(200) });
@@ -37,7 +39,7 @@ const Finish = z.strictObject({ segmentCount: z.number().int().min(1).max(MAX_SE
 /** The caller's lecture under RLS, or null (unknown, foreign or not a uuid). */
 async function load(supabase: Db, userId: string, id: string): Promise<Lecture | null> {
   if (!z.uuid().safeParse(id).success) return null;
-  const { data } = await supabase.from("lectures").select("id, lecture_course_id, number, title, status, file_id").eq("id", id).eq("user_id", userId).maybeSingle().throwOnError();
+  const { data } = await supabase.from("lectures").select("id, lecture_course_id, number, title, status, file_id, started_at").eq("id", id).eq("user_id", userId).maybeSingle().throwOnError();
   return data;
 }
 
@@ -115,7 +117,7 @@ export async function saveSegment(supabase: Db, userId: string, id: string, nPar
   const lecture = await load(supabase, userId, id);
   if (!lecture) return NOT_FOUND;
   const n = Number(nParam);
-  if (!/^\d{1,3}$/.test(nParam) || n >= MAX_SEGMENTS) return bad("Unknown segment.");
+  if (!/^\d{1,3}$/.test(nParam) || n >= MAX_SEGMENTS || n > lastSegment(lecture)) return bad("Unknown segment.");
   const parsed = Frames.safeParse(input);
   if (!parsed.success) return bad("Send the segment's frames.");
   if (lecture.status !== "recording") return { code: 409, body: { error: "This lecture is no longer recording." } };
@@ -162,7 +164,7 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
     const { data: rows } = await supabase.from("lecture_segments").select("n, status, result").eq("lecture_id", id).eq("user_id", userId).throwOnError();
     // In parallel, so a finish with many missing segments stays well inside 300 s.
     const found = await Promise.all(
-      Array.from({ length: parsed.data.segmentCount }, (_, n) => {
+      Array.from({ length: Math.min(parsed.data.segmentCount, lastSegment(lecture) + 1) }, (_, n) => {
         const row = rows?.find((r) => r.n === n);
         if (row?.status === "done") return row.result as unknown as Segment;
         // No audio uploaded: a gap in the notes, not a failed lecture.
