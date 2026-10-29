@@ -19,25 +19,12 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("toMarkdown", () => {
-  it("toMarkdown writes headings, board markdown and Exam lines", () => {
-    const md = toMarkdown(notes([1]), [snap(0, "$a$"), snap(30, "$$E = mc^2$$")]);
-    expect(md).toContain("# Energy");
-    expect(md).toContain("## Mass-energy");
-    expect(md).toContain("Energy is $E = mc^2$.");
-    expect(md).toContain("$$E = mc^2$$");
-    expect(md).not.toContain("$a$");
-    expect(md).not.toContain("f30.jpg");
-    expect(md).toContain("Exam: This will be on the test.");
-    expect(md).toContain("rest mass");
-  });
-});
-
 describe("toMarkdown boxes", () => {
-  it("toMarkdown output for notes without boxes is unchanged", () => {
-    const md = toMarkdown(notes([1]), [snap(0, "$a$"), snap(30, "$$E = mc^2$$")]);
-    expect(md).toBe(
-      "# Energy\n\nMass and energy are the same thing.\n\n## Mass-energy\n\nEnergy is $E = mc^2$.\n\n$$E = mc^2$$\n\n" +
+  // No raw board readings: on rushed chalk they carry [unreadable], repeats and their own headings (MIT 6.041 lec 10 run,
+  // 2026-10-29); the notes and boxes already hold what the board said.
+  it("toMarkdown output for notes without boxes", () => {
+    expect(toMarkdown(notes([1]))).toBe(
+      "# Energy\n\nMass and energy are the same thing.\n\n## Mass-energy\n\nEnergy is $E = mc^2$.\n\n" +
         "Exam: This will be on the test.\n\n## Terms\n\n- **rest mass**: mass measured at rest\n",
     );
   });
@@ -50,7 +37,7 @@ describe("toMarkdown boxes", () => {
       { kind: "graph", title: "Residuals", caption: "The spread grows with the fit.", x: "fitted", y: "residual", series: [{ label: "obs", points: [[1, 2]] }] },
       { kind: "mistake", text: "Reading a fan as a curve." },
     ];
-    const md = toMarkdown(n, []);
+    const md = toMarkdown(n);
     expect(md).toContain("$$E = mc^2$$\n\n- $c$: speed of light");
     expect(md).toContain("**Worked example:** Solve $2x = 4$.\n\n1. Divide by 2.\n\n**Answer:** $x = 2$\n\n**Check:** $2 \\cdot 2 = 4$");
     expect(md).toContain("**Graph: Residuals**\n\nThe spread grows with the fit.\n\nA graph of residual against fitted.");
@@ -66,20 +53,9 @@ describe("toMarkdown boxes", () => {
       { kind: "example", question: "q", steps: ["s"], answer: "a" },
       { kind: "graph", title: "T", x: "x", y: "y", series: [{ label: "s", points: [[1, 2]] }] },
     ];
-    const md = toMarkdown(n, []);
+    const md = toMarkdown(n);
     expect(md).not.toContain("Check");
     expect(md).toContain("**Graph: T**\n\nA graph of y against x.");
-  });
-});
-
-describe("toMarkdown repeats", () => {
-  it("toMarkdown prints each snapshot once, at its first reference", () => {
-    const n = notes([0]);
-    n.sections.push({ heading: "Again", body: "More.", snaps: [0, 1], exam: [] });
-    const md = toMarkdown(n, [snap(0, "BOARD-A"), snap(30, "BOARD-B")]);
-    expect(md.split("BOARD-A")).toHaveLength(2);
-    expect(md.indexOf("BOARD-A")).toBeLessThan(md.indexOf("## Again"));
-    expect(md.indexOf("BOARD-B")).toBeGreaterThan(md.indexOf("## Again"));
   });
 });
 

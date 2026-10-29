@@ -238,7 +238,7 @@ export async function linkLecture(supabase: Db, userId: string, id: string, inpu
   const week = (await supabase.from("weeks").select("id, course_id, number, topic").eq("id", parsed.data.weekId).maybeSingle().throwOnError()).data;
   if (!week) return { code: 404, body: { error: "Week not found." } };
   const admin = createAdminClient();
-  const markdown = toMarkdown(found.notes, found.snaps);
+  const markdown = toMarkdown(found.notes);
   const name = `Lecture ${lecture.number}${lecture.title ? ` · ${lecture.title}` : ""}`.slice(0, 200);
   const { data: file } = await admin
     .from("files")
@@ -263,7 +263,7 @@ export async function exportLecture(supabase: Db, userId: string, id: string, fo
   if (format !== "pdf" && format !== "docx") return bad("Ask for pdf or docx.");
   if (!found.notes) return { code: 409, body: { error: "These notes are not ready yet." } };
   const course = await courseOf(supabase, userId, found.lecture.lecture_course_id);
-  const markdown = toMarkdown(found.notes, found.snaps);
+  const markdown = toMarkdown(found.notes);
   const day = new Date(found.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Toronto" });
   const filename = `${course?.name ?? "Lecture"} ${day} notes`.replace(/[^\w .()-]+/g, "").trim() + `.${format}`;
   return format === "pdf"

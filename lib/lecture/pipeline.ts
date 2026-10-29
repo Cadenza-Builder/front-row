@@ -36,5 +36,5 @@ export async function finishLecture(segments: Segment[], course: string, keyword
   const frames = segments.flatMap((s) => s.frames).sort(byTime);
   const snaps = segments.flatMap((s) => s.snaps).sort(byTime);
   const { notes, usage } = await compose({ turns: link(turns, frames, snaps), snaps, course, keywords });
-  return { notes, snaps, markdown: toMarkdown(notes, snaps), usage };
+  return { notes, snaps, markdown: toMarkdown(notes), usage };
 }
