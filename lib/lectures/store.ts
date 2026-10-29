@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { refused } from "@/lib/billing/plans";
 import { indexFiles } from "@/lib/companion/search";
-import { finishLecture, processSegment, toMarkdown, type Notes, type Snapshot } from "@/lib/lecture";
+import type { Snapshot } from "@/lib/lecture/board";
+import { toMarkdown, type Notes } from "@/lib/lecture/compose";
+import { finishLecture, processSegment } from "@/lib/lecture/pipeline";
+import { runTokens } from "@/lib/openai/client";
 import { SOMETHING_WRONG } from "@/lib/runs/startRun";
 import { removeFolder } from "@/lib/account/deleteAccount";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,13 +20,15 @@ import { notesDocx, notesPdf } from "./export";
 type Db = SupabaseClient<Database>;
 type Reply = { code: number; body: Record<string, unknown> };
 type Segment = Awaited<ReturnType<typeof processSegment>>;
-type Lecture = { id: string; lecture_course_id: string; number: number; title: string | null; status: string; file_id: string | null };
+type Lecture = { id: string; lecture_course_id: string; number: number; title: string | null; status: string; file_id: string | null; started_at: string };
 
 const SEG = 120; // seconds per segment, as the recorder cuts them
 const MAX_SEGMENTS = 180; // six hours
 const STALE_MS = 6 * 60_000; // past maxDuration: a finish still processing after this was killed
 const NOT_FOUND: Reply = { code: 404, body: { error: "Lecture not found." } };
 const bad = (error: string): Reply => ({ code: 400, body: { error } });
+/** The last segment a lecture can have reached by now, a minute of clock slack included: segment work keeps pace with real time. The ceiling is still the daily run cap. */
+const lastSegment = (l: Lecture) => Math.floor(((Date.now() - Date.parse(l.started_at)) / 1000 + 60) / SEG);
 
 const Create = z.strictObject({ lectureCourseId: z.uuid(), source: z.enum(["phone", "room"]), consent: z.literal(true).optional() });
 const Rename = z.strictObject({ title: z.string().trim().min(1).max(200) });
@@ -34,7 +39,7 @@ const Finish = z.strictObject({ segmentCount: z.number().int().min(1).max(MAX_SE
 /** The caller's lecture under RLS, or null (unknown, foreign or not a uuid). */
 async function load(supabase: Db, userId: string, id: string): Promise<Lecture | null> {
   if (!z.uuid().safeParse(id).success) return null;
-  const { data } = await supabase.from("lectures").select("id, lecture_course_id, number, title, status, file_id").eq("id", id).eq("user_id", userId).maybeSingle().throwOnError();
+  const { data } = await supabase.from("lectures").select("id, lecture_course_id, number, title, status, file_id, started_at").eq("id", id).eq("user_id", userId).maybeSingle().throwOnError();
   return data;
 }
 
@@ -75,6 +80,16 @@ export async function createLecture(supabase: Db, userId: string, input: unknown
     const { data: me } = await supabase.from("profiles").select("recording_consent_at").eq("user_id", userId).maybeSingle().throwOnError();
     if (!me?.recording_consent_at) return { code: 409, body: { error: "consent" } };
   }
+  // The lecture's segment work (transcribe, SAM, board reads) counts here, one run per lecture: it is done, not running,
+  // since segments arrive for hours. finish counts its own run.
+  let runId: string;
+  try {
+    runId = await startRun(supabase, "lecture");
+  } catch (err) {
+    if (err instanceof Error && err.cause === "refused") return { code: 429, body: { error: err.message } };
+    throw err;
+  }
+  await admin.from("runs").update({ status: "done", finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
   // The highest number, not the count, so a deleted lecture never makes two "Lecture 3"s.
   // shortcut: two creates in the same instant can share a number; add a unique index if that is ever seen.
   const { data: last } = await supabase.from("lectures").select("number").eq("lecture_course_id", lectureCourseId).eq("user_id", userId).order("number", { ascending: false }).limit(1).maybeSingle().throwOnError();
@@ -102,14 +117,17 @@ export async function saveSegment(supabase: Db, userId: string, id: string, nPar
   const lecture = await load(supabase, userId, id);
   if (!lecture) return NOT_FOUND;
   const n = Number(nParam);
-  if (!/^\d{1,3}$/.test(nParam) || n >= MAX_SEGMENTS) return bad("Unknown segment.");
+  if (!/^\d{1,3}$/.test(nParam) || n >= MAX_SEGMENTS || n > lastSegment(lecture)) return bad("Unknown segment.");
   const parsed = Frames.safeParse(input);
   if (!parsed.success) return bad("Send the segment's frames.");
   if (lecture.status !== "recording") return { code: 409, body: { error: "This lecture is no longer recording." } };
   const admin = createAdminClient();
   const { frames } = parsed.data;
-  // Kept first so finish can process it again if this request dies.
-  await admin.from("lecture_segments").upsert({ lecture_id: id, user_id: userId, n, status: "uploaded", result: { frames } }, { onConflict: "lecture_id,n" }).throwOnError();
+  // Kept first so finish can process it again if this request dies. Each segment is processed here once: a second send
+  // (a retry, a replay) hits the (lecture_id, n) key and is left to finish, which does the ones not done.
+  const { error } = await admin.from("lecture_segments").insert({ lecture_id: id, user_id: userId, n, status: "uploaded", result: { frames } });
+  if (error?.code === "23505") return { code: 202, body: {} };
+  if (error) throw error;
   try {
     await runSegment(supabase, admin, userId, id, n, frames, (await courseOf(supabase, userId, lecture.lecture_course_id))?.keywords ?? []);
   } catch (err) {
@@ -137,6 +155,8 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
   const dir = `${userId}/${id}`;
   let runId: string | null = null;
   try {
+    // Before any segment work: a Retry after a failure processes segments again, so each one counts.
+    runId = await startRun(supabase, "lecture");
     // The course cascades its lectures away, so it is here while the lecture is.
     const course = await courseOf(supabase, userId, lecture.lecture_course_id);
     if (!course) throw new Error(`lecture ${id}: course not found`);
@@ -144,7 +164,7 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
     const { data: rows } = await supabase.from("lecture_segments").select("n, status, result").eq("lecture_id", id).eq("user_id", userId).throwOnError();
     // In parallel, so a finish with many missing segments stays well inside 300 s.
     const found = await Promise.all(
-      Array.from({ length: parsed.data.segmentCount }, (_, n) => {
+      Array.from({ length: Math.min(parsed.data.segmentCount, lastSegment(lecture) + 1) }, (_, n) => {
         const row = rows?.find((r) => r.n === n);
         if (row?.status === "done") return row.result as unknown as Segment;
         // No audio uploaded: a gap in the notes, not a failed lecture.
@@ -157,11 +177,10 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
     // Notes from no words and no boards would be the model's invention.
     if (!segments.some((s) => s.turns.length || s.snaps.length)) throw new Error("Nothing was recorded", { cause: "refused" });
 
-    runId = await startRun(supabase, "lecture");
-    // Front Row records outside Cadenza's weeks: no course material, the course's keywords for its terms.
-    const { notes, snaps } = await finishLecture(segments, course.name, "", course.keywords);
+    // Front Row records outside Cadenza's weeks: the course's keywords for its terms.
+    const { notes, snaps, usage } = await finishLecture(segments, course.name, course.keywords);
     await admin.from("lectures").update({ status: "ready", title: notes.title.slice(0, 200), notes: notes as never, snaps: snaps as never, error: null }).eq("id", id).eq("user_id", userId).throwOnError();
-    if (runId) await admin.from("runs").update({ status: "done", finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
+    await admin.from("runs").update({ status: "done", ...runTokens(usage), finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
     // The audio goes once the notes are saved; the frames stay for the snapshots.
     const wavs = [...names].filter((f) => f.endsWith(".wav")).map((f) => `${dir}/${f}`);
     if (wavs.length) {

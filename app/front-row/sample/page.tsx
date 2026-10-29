@@ -1,6 +1,7 @@
 import { LectureNotes } from "../lectures/[id]/LectureNotes";
 import { SAMPLE } from "./lecture";
 import "../../courses/[id]/weeks/[n]/learn/screen-learn.css";
+import "../back.css";
 import "../lectures/[id]/front-row.css";
 
 export const metadata = { title: "Sample Lecture Notes" };

@@ -57,7 +57,7 @@ try {
     );
   }
 
-  const { notes, snaps, markdown } = await finishLecture(segments, values.course, "", keywords);
+  const { notes, snaps, markdown } = await finishLecture(segments, values.course, keywords);
   await writeFile("notes.json", JSON.stringify({ notes, snaps }, null, 2));
   console.log(markdown);
 } finally {

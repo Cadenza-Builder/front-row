@@ -110,12 +110,13 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
       <div className="shell" ref={box}>
         <div className="bar1">
           <Link className="back" href="/front-row/home" aria-label="Home"><span className="tile"><svg className="ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></span></Link>
-          {/* Still recording after the reveal: the phone's finish never landed (offline at Stop, or Back mid-lecture). */}
-          {lec.status === "recording" && tick >= TICKS && rows.length > 0 ? (
+          {/* Still recording after the reveal: the phone's finish never landed (offline at Stop, or Back mid-lecture).
+              With no part landed there is nothing to write notes from, so no button. */}
+          {lec.status === "recording" && tick >= TICKS ? (
             <>
               <h1><span className="light">Notes</span> <span className="cz-grad">not started.</span></h1>
-              <span className="err" role="alert">This lecture was never sent for notes.</span>
-              <button type="button" className="cz-btn" onClick={retry}><span className="cz-btn__label">Write Notes</span></button>
+              <span className="err" role="alert">{rows.length ? "This lecture was never sent for notes." : "Nothing from this lecture reached Front Row."}</span>
+              {rows.length > 0 && <button type="button" className="cz-btn" onClick={retry}><span className="cz-btn__label">Write Notes</span></button>}
             </>
           ) : lec.status === "failed" ? (
             <>

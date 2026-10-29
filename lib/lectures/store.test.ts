@@ -4,7 +4,7 @@ import { fakeClient } from "./fakeClient";
 
 const h = vi.hoisted(() => ({ admin: null as unknown, processSegment: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.admin }));
-vi.mock("@/lib/lecture", async (actual) => ({ ...(await actual<object>()), processSegment: h.processSegment, finishLecture: vi.fn() }));
+vi.mock("@/lib/lecture/pipeline", async (actual) => ({ ...(await actual<object>()), processSegment: h.processSegment, finishLecture: vi.fn() }));
 vi.mock("@/lib/companion/search", () => ({ indexFiles: vi.fn() }));
 
 import { createLecture, deleteLecture, linkLecture, renameLecture, saveSegment } from "./store";
@@ -26,7 +26,7 @@ const seed = (consent: string | null = null) => ({
     { id: THEIRS, user_id: OTHER, name: "MAT135", keywords: [], meets: null },
   ],
   lectures: [
-    { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 2, week_id: null, status: "recording", file_id: "f1" },
+    { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 2, week_id: null, status: "recording", file_id: "f1", started_at: "2026-10-28T09:00:00Z" },
     { id: FOREIGN, user_id: OTHER, lecture_course_id: THEIRS, number: 1, week_id: null, status: "recording", file_id: null },
   ],
   files: [{ id: "f1", user_id: ME, week_id: WEEK, origin: "lecture", text: "notes" }],
@@ -54,6 +54,15 @@ test("create with consent stamps it and numbers the lecture after the course's h
 test("the first lecture of a course is Lecture 1", async () => {
   const db = use(fakeClient({ ...seed("2026-10-27"), lectures: [] }));
   expect((await createLecture(db.client, ME, { lectureCourseId: COURSE, source: "room" })).body.number).toBe(1);
+});
+
+test("create counts against the daily run cap, and a refusal makes no lecture", async () => {
+  const db = use(fakeClient(seed("2026-10-27")));
+  const rpc = vi.fn(async () => ({ data: null, error: { message: "daily_run_cap" } }));
+  (db.client as { rpc: unknown }).rpc = rpc;
+  expect(await createLecture(db.client, ME, { lectureCourseId: COURSE, source: "phone" })).toEqual({ code: 429, body: { error: "You have hit today's limit, try again tomorrow." } });
+  expect(rpc).toHaveBeenCalledWith("start_run", { p_week_id: null, p_kind: "lecture" });
+  expect(db.tables.lectures).toHaveLength(2);
 });
 
 test("create on another student's course returns 404 and writes nothing", async () => {
@@ -154,4 +163,20 @@ test("Add to Cadenza refuses another student's lecture, a week RLS hides, and no
   db.tables.weeks = [{ id: WEEK, user_id: ME, course_id: "c1", number: 3 }];
   expect((await linkLecture(db.client, ME, LEC, { weekId: WEEK })).code).toBe(409);
   expect(db.tables.files).toEqual([]);
+});
+
+test("a segment already sent is not processed again, and its saved result stays", async () => {
+  const done = { turns: [{ t: 120, text: "hi" }], frames: [], snaps: [] };
+  const db = use(fakeClient({ ...seed(), lecture_segments: [{ lecture_id: LEC, user_id: ME, n: 1, status: "done", result: done }] }, [`${ME}/${LEC}/1.wav`]));
+  expect((await saveSegment(db.client, ME, LEC, "1", { frames: [{ t: 130, changed: true }] })).code).toBe(202);
+  expect(h.processSegment).not.toHaveBeenCalled();
+  expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ status: "done", result: done })]);
+});
+
+test("a segment later than the lecture has been running is refused before any model call", async () => {
+  const db = use(fakeClient({ ...seed(), lectures: [{ id: LEC, user_id: ME, lecture_course_id: COURSE, number: 2, status: "recording", started_at: new Date(Date.now() - 5 * 60_000).toISOString() }] }));
+  // Five minutes in: segment 2 (4:00-6:00) can be sent, segment 5 (10:00) cannot exist yet.
+  expect((await saveSegment(db.client, ME, LEC, "5", { frames: [] })).code).toBe(400);
+  expect(h.processSegment).not.toHaveBeenCalled();
+  expect(db.tables.lecture_segments ?? []).toEqual([]);
 });
