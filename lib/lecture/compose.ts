@@ -74,6 +74,7 @@ const PROMPT =
   "List a section's board snapshots by index in `snaps`. " +
   "Add to `exam` only what the professor said is important or will be on the test: `quote` is a short clean statement of what is examinable " +
   '(e.g. "Spotting heteroskedasticity from a residual plot: on the midterm"), not their words; `t` is that turn\'s start in seconds. ' +
+  "Board writing left up all lecture (an outline, a list of terms) is not a topic: use it in the sections that discuss it, never as a section of its own. " +
   'Only when a whole section has no speech, say "no speech captured" once and write it from the board. ' +
   "Speech recognition mishears course terms, especially with an accent: when a transcript word is a misheard version of a term on the board " +
   "or in the keywords, write the board's or the keywords' spelling. Write [inaudible] for speech that stays unclear; never guess what was said. " +

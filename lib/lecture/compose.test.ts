@@ -95,6 +95,8 @@ describe("compose", () => {
     expect(prompt).toContain("Never put timestamps, snap numbers, `pointing`");
     expect(prompt).toContain("short clean statement of what is examinable");
     expect(prompt).toContain('Only when a whole section has no speech, say "no speech captured"');
+    // Yale HIST 210 run (2026-10-29): the outline left up on the board became "Standing Board Headings Without Captured Discussion".
+    expect(prompt).toContain("Board writing left up all lecture (an outline, a list of terms) is not a topic");
   });
 
   it("compose with zero turns still returns notes from snapshots", async () => {
