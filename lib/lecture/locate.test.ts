@@ -46,21 +46,34 @@ describe("pickProfessor", () => {
 
 describe("locate", () => {
   it("locate asks SAM for the board and people and picks the professor", async () => {
-    const outputs: Record<string, string> = {
-      "whiteboard, blackboard or projector screen": fixture("sam-board.txt"),
-      person: fixture("sam-person.txt"),
-    };
+    // SAM 3.1 answers one noun phrase; anything else (the old combined list included) finds nothing.
+    const outputs: Record<string, string> = { whiteboard: fixture("sam-board.txt"), person: fixture("sam-person.txt") };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const create = vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
       expect(body.model).toBe("sam-3.1");
       const [text, image] = body.input[0].content;
       expect(image).toEqual({ type: "input_image", image_url: "https://x/f.jpg" });
-      return { output_text: outputs[text.text] };
+      return { output_text: outputs[text.text] ?? "" };
     }) as never);
     const { board, person } = await locate("https://x/f.jpg");
-    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(4); // blackboard, whiteboard, projector screen, person
     expect(board).toMatchObject({ x1: 0, y1: 70, x2: 1010, y2: 576 });
     expect(person).toMatchObject({ x1: 658, y1: 241, x2: 973, y2: 675 });
+  });
+
+  it("locate finds a chalkboard, which SAM only sees when asked for a blackboard alone", async () => {
+    // Live, 2026-10-28, MIT 18.06 lecture 3 frame: the combined prompt returned "", "blackboard" this box.
+    const chalk = "<0f>0<|box;x1=8;y1=53;x2=946;y2=461;w=960;h=720|>,1<|box;x1=8;y1=0;x2=949;y2=33;w=960;h=720|>";
+    const prof = "<0f>0<|box;x1=358;y1=140;x2=647;y2=719;w=960;h=720|>";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
+      const text = body.input[0].content[0].text;
+      return { output_text: text === "blackboard" ? chalk : text === "person" ? prof : "" };
+    }) as never);
+    expect(await locate("https://x/f.jpg")).toEqual({
+      board: { x1: 8, y1: 53, x2: 946, y2: 461, w: 960, h: 720 },
+      person: { x1: 358, y1: 140, x2: 647, y2: 719, w: 960, h: 720 },
+    });
   });
 
   it("locate returns nulls when SAM finds nothing", async () => {
