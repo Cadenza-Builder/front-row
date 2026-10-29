@@ -30,11 +30,7 @@ function warn<T>(t: number, step: string, e: unknown, fallback: T): T {
 }
 
 /** All segments of a lecture into notes. `link` needs time order, so frames and snapshots are sorted. */
-export async function finishLecture(
-  segments: Segment[],
-  course: string,
-  keywords: string[],
-) {
+export async function finishLecture(segments: Segment[], course: string, keywords: string[]) {
   const byTime = (a: { t: number }, b: { t: number }) => a.t - b.t;
   const turns = joinTurns(segments.map((s) => s.turns));
   const frames = segments.flatMap((s) => s.frames).sort(byTime);

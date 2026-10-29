@@ -27,7 +27,7 @@ const MAX_SEGMENTS = 180; // six hours
 const STALE_MS = 6 * 60_000; // past maxDuration: a finish still processing after this was killed
 const NOT_FOUND: Reply = { code: 404, body: { error: "Lecture not found." } };
 const bad = (error: string): Reply => ({ code: 400, body: { error } });
-/** The last segment a lecture can have reached by now, a minute of clock slack included: one run never pays for 180 at once. */
+/** The last segment a lecture can have reached by now, a minute of clock slack included: segment work keeps pace with real time. The ceiling is still the daily run cap. */
 const lastSegment = (l: Lecture) => Math.floor(((Date.now() - Date.parse(l.started_at)) / 1000 + 60) / SEG);
 
 const Create = z.strictObject({ lectureCourseId: z.uuid(), source: z.enum(["phone", "room"]), consent: z.literal(true).optional() });
