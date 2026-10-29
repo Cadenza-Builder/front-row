@@ -35,6 +35,17 @@ describe("transcribe", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it("transcribe sends only keywords of 30 characters or fewer", async () => {
+    // Meta answers 400 "ASR keyword 2 exceeds the maximum length of 30 characters" and the whole segment fails (2026-10-29).
+    let sent: unknown;
+    const fetchImpl = vi.fn(async (_: string | URL | Request, init?: RequestInit) => {
+      sent = JSON.parse(await ((init?.body as FormData).get("request") as Blob).text()).keywords;
+      return json({ transcript: "", turns: [] });
+    });
+    await transcribe(wav, { keywords: ["a".repeat(30), "cumulative distribution function", "zeta"], offset: 0, fetchImpl });
+    expect(sent).toEqual(["a".repeat(30), "zeta"]);
+  });
+
   it("maps the real ASR fixture", async () => {
     const body = JSON.parse(readFileSync(join(__dirname, "fixtures/asr.json"), "utf8"));
     const turns = await transcribe(wav, { keywords: [], offset: 0, fetchImpl: async () => json(body) });

@@ -10,7 +10,9 @@ export async function transcribe(
   opts: { keywords: string[]; offset: number; fetchImpl?: typeof fetch },
 ): Promise<Turn[]> {
   const form = new FormData();
-  const request = { model: "muse-voice-transcribe-1.0", audioEncoding: "WAV", mode: "DIARIZATION", keywords: opts.keywords };
+  // Meta refuses the whole request over one keyword longer than 30 characters; compose still gets every keyword.
+  const keywords = opts.keywords.filter((k) => k.length <= 30);
+  const request = { model: "muse-voice-transcribe-1.0", audioEncoding: "WAV", mode: "DIARIZATION", keywords };
   form.append("request", new Blob([JSON.stringify(request)], { type: "application/json" }));
   form.append("audio", wav, "audio.wav");
   const res = await (opts.fetchImpl ?? fetch)("https://api.meta.ai/v1/asr/transcribe", {
