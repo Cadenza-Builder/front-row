@@ -1,0 +1,42 @@
+/* Front Row Home (mockups/front-row/keep.html, take A · One Thing). Not Cadenza's dashboard: bone on black, body text
+   20px or more, every target 64px or taller, nothing truncated. Aa sets html.fr-big: every rem grows by a quarter. */
+html.fr-big{font-size:125%}
+.s-fr-home{font-size:1.25rem;min-height:100vh}
+.s-fr-home::before{content:"";position:fixed;inset:-20vh -10vw auto;height:70vh;pointer-events:none;z-index:-1;
+  background:radial-gradient(60% 60% at 50% 0%,color-mix(in srgb,var(--grad-2) 22%,transparent),transparent 70%)}
+.s-fr-home :focus-visible{outline:3px solid var(--amber)!important;outline-offset:3px}
+.s-fr-home .bar{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4) var(--gutter)}
+.s-fr-home .logo{display:flex;align-items:center;gap:var(--space-3);margin-right:auto;font-weight:700;font-size:1.25rem}
+.s-fr-home .logo img{width:32px;height:32px}
+.s-fr-home .btn-round{display:grid;place-items:center;min-width:64px;height:64px;padding:0 var(--space-4);border:0;border-radius:var(--r-pill);background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--bone);font:inherit;font-size:1.125rem;font-weight:700;cursor:pointer}
+.s-fr-home .btn-round[aria-pressed="true"]{background:var(--bone);color:var(--ink-0)}
+.s-fr-home main{padding:var(--space-6) var(--gutter) 9rem}
+.s-fr-home .wrap{display:grid;gap:var(--space-12)}
+.s-fr-home h1{font-size:clamp(2.25rem,5vw,3.75rem);line-height:1;letter-spacing:-.045em}
+.s-fr-home .sub{color:var(--bone);font-size:1.375rem;margin-top:var(--space-3)}
+.s-fr-home h2.sec{font-size:1.75rem;letter-spacing:-.02em;margin-bottom:var(--space-4)}
+.s-fr-home .big-btn{display:flex;align-items:center;justify-content:center;gap:var(--space-4);width:100%;min-height:88px;border-radius:var(--r-2xl);background:var(--grad-amber);color:var(--on-amber);font-size:1.625rem;font-weight:700;letter-spacing:-.01em}
+.s-fr-home .big-btn .rdot{width:18px;height:18px;border-radius:50%;background:var(--rose);box-shadow:0 0 0 3px var(--on-amber)}
+.s-fr-home .nb.lg{--w:72px}
+.s-fr-home .nb.lg span{font-size:.875rem}
+.s-fr-home .nb.add{filter:grayscale(1) brightness(.5)}
+.s-fr-home .next{display:grid;gap:var(--space-6);padding:var(--space-8);border-radius:var(--r-3xl);background:var(--ink-1);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--grad-2) 70%,transparent)}
+.s-fr-home .next .label{margin:0;color:var(--bone);font-size:1rem}
+.s-fr-home .chips{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.s-fr-home .chip{display:inline-flex;align-items:center;min-height:64px;padding:0 var(--space-6);border-radius:var(--r-pill);background:var(--ink-2);box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--bone);font-size:1.25rem;font-weight:700;cursor:pointer}
+.s-fr-home .chip input{position:absolute;opacity:0;width:1px;height:1px}
+.s-fr-home .chip:has(:checked){background:var(--bone);color:var(--ink-0)}
+.s-fr-home .chip:has(:focus-visible){outline:3px solid var(--amber);outline-offset:3px}
+.s-fr-home .other{justify-self:start;min-height:64px;padding:0;border:0;background:none;color:var(--bone);font:inherit;font-size:1.125rem;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+.s-fr-home .rows{display:grid;gap:var(--space-3)}
+.s-fr-home .row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--space-6);align-items:center;min-height:112px;padding:var(--space-4) var(--space-6);border-radius:var(--r-2xl);background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--hair-strong);color:var(--bone)}
+.s-fr-home .row b{display:block;font-size:1.625rem;letter-spacing:-.02em}
+.s-fr-home .row span{display:block;color:var(--bone);opacity:.8;font-size:1.125rem}
+.s-fr-home .row .go{font-size:1.125rem;font-weight:700;white-space:nowrap}
+.s-fr-home .row:hover{box-shadow:inset 0 0 0 1.5px var(--bone)}
+@media (max-width:720px){
+  .s-fr-home .row{grid-template-columns:auto minmax(0,1fr);gap:var(--space-4)}
+  .s-fr-home .row .go{grid-column:1/-1}
+  .s-fr-home .big-btn{padding:0 var(--space-4);font-size:1.375rem;text-align:center}
+  .s-fr-home .big-btn .rdot{flex:none}
+}

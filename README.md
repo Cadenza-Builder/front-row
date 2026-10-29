@@ -24,3 +24,9 @@ echo 'MODEL_API_KEY=...' > .env
 npm run notes -- lecture.mp4 --course "ECO220" --keywords "heteroskedasticity,residual"
 npm test
 ```
+
+## What's here
+
+- `lib/lecture/`: the pipeline (transcribe, find the board, read it, link speech to board, write the notes). Runs on its own.
+- `app/front-row/`, `app/api/`, `lib/lectures/`, `supabase/`: the screens, routes and schema that plug Front Row into Cadenza. They import Cadenza's private code, so they are here to read, not to run.
+- `ios/FrontRowShell.swiftpm`: the iPhone shell (one web view on Front Row). Open it in Xcode.

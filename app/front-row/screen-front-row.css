@@ -1,0 +1,31 @@
+/* Front Row landing (mockups/front-row/find.html, take B · Viewfinder), on top of screen-landing.css. */
+.fr-landing .cz-nav__logo{white-space:nowrap}
+.fr-landing .cz-nav__logo small{font-weight:400;color:var(--ash);font-size:.8125rem;margin-left:2px}
+.fr-landing #schools .priv{margin:0;padding:var(--space-4) var(--gutter);border-top:1px solid var(--rule);text-align:center;font-size:.875rem}
+@media (max-width:480px){.fr-landing .cz-nav .cz-nav__link[href="#privacy"],.fr-landing .cz-nav__logo small{display:none}}
+
+/* The hero: you are looking through the phone, and the headline is the board it finds. */
+.frh{position:relative;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-items:center;min-height:100svh;padding:calc(var(--space-16) + 56px) var(--gutter) var(--space-16);overflow:hidden;text-align:center;
+  background:radial-gradient(70% 60% at 50% 45%,color-mix(in srgb,var(--grad-3) 16%,transparent),transparent 70%)}
+.frh h1{font-size:clamp(3rem,7.5vw,7rem);line-height:.92;letter-spacing:-.055em}
+.vfr{position:absolute;inset:calc(56px + var(--space-8)) var(--gutter) var(--space-8);pointer-events:none}
+.vfr>i{position:absolute;width:44px;height:44px;border:2px solid var(--amber)}
+.vfr>i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-top-left-radius:14px}
+.vfr>i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-top-right-radius:14px}
+.vfr>i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0;border-bottom-left-radius:14px}
+.vfr>i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-bottom-right-radius:14px}
+.vfr .rec{position:absolute;left:var(--space-6);top:var(--space-4);display:flex;align-items:center;gap:var(--space-2);font-size:.8125rem;letter-spacing:.08em;color:var(--bone);font-variant-numeric:tabular-nums}
+.vfr .rec b{width:8px;height:8px;border-radius:50%;background:var(--rose);animation:blink 1.4s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.vfr .meta{position:absolute;right:var(--space-6);top:var(--space-4);font-size:.8125rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash)}
+.vfr .thirds{position:absolute;inset:0;background:linear-gradient(90deg,transparent calc(33.33% - .5px),var(--hair) calc(33.33% - .5px) calc(33.33% + .5px),transparent 0,transparent calc(66.66% - .5px),var(--hair) calc(66.66% - .5px) calc(66.66% + .5px),transparent 0),linear-gradient(transparent calc(33.33% - .5px),var(--hair) calc(33.33% - .5px) calc(33.33% + .5px),transparent 0,transparent calc(66.66% - .5px),var(--hair) calc(66.66% - .5px) calc(66.66% + .5px),transparent 0)}
+.frh .copy{position:relative;display:grid;justify-items:center;width:max-content;max-width:100%}
+.frh .lead{width:100%;margin:var(--space-4) auto 0;font-size:clamp(1rem,1.5vw,1.25rem);line-height:1.35;color:var(--bone);text-wrap:balance}
+.frh .cta{margin-top:var(--space-6);justify-content:center}
+.found{position:relative;padding:var(--space-6) var(--space-8);border-radius:var(--r-xl)}
+.found::before{content:"";position:absolute;inset:0;border:2px solid var(--amber);border-radius:inherit;animation:lock 1.1s var(--ease-standard) .4s both}
+.found .lab{position:absolute;left:-2px;top:-30px;padding:3px 10px;border-radius:var(--r-pill);background:var(--amber);color:var(--on-amber);font-size:.75rem;font-weight:500;animation:fadein .3s 1.4s both}
+@keyframes lock{0%{opacity:0;inset:-60px -120px}60%{opacity:1}100%{opacity:1;inset:0}}
+@keyframes fadein{from{opacity:0}}
+@media (max-width:900px){.vfr .meta{display:none}}
+@media (prefers-reduced-motion:reduce){.frh *,.frh *::before{animation:none!important;clip-path:none!important;opacity:1!important;translate:none!important}}

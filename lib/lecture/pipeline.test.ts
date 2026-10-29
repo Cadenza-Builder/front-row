@@ -43,6 +43,8 @@ describe("processSegment", () => {
       .mockImplementationOnce(async (f) => ({ t: f.t, url: f.url, board: f.board, markdown: "$x$", alt: "x" }));
     const out = await processSegment({ wav, offset: 0, frames: [frame(0), frame(10), frame(20)], keywords: [] });
     expect(out.snaps.map((s) => s.t)).toEqual([10]);
+    // Board reads get the segment's transcript to settle unclear symbols.
+    expect(vi.mocked(readBoard).mock.calls[0][1]).toEqual([{ start: 1, end: 2, text: "hi" }]);
     expect(out.frames[2].board).toBeNull();
   });
 
@@ -71,8 +73,9 @@ describe("finishLecture", () => {
       // Overlap: "b" again (ends before 121) is dropped.
       { turns: [{ start: 119, end: 120.5, text: "b" }, { start: 131, end: 150, text: "c" }], frames: [], snaps: [snap(130)] },
     ];
-    const out = await finishLecture(segments, "ECO220", "");
+    const out = await finishLecture(segments, "ECO220", "", ["OLS"]);
     const sent = vi.mocked(compose).mock.calls[0][0];
+    expect(sent.keywords).toEqual(["OLS"]);
     expect(sent.turns.map((t) => [t.text, t.snap])).toEqual([["a", null], ["b", 0], ["c", 1]]);
     expect(out.snaps.map((s) => s.t)).toEqual([10, 130]);
     expect(out.markdown).toContain("board 130");

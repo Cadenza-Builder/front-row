@@ -1,0 +1,169 @@
+/* Front Row's lecture screens: Wait (mockups/front-row/wait.html, take Live Pipeline) and Read (read.html, on top of
+   screen-learn.css), with the shared pieces of the mockups' stage.css. Scoped to .fr-wait / .fr-read; keyframes fr-. */
+:is(.fr-read,.fr-wait){
+  .back{display:flex;align-items:center;gap:var(--space-3);margin-right:auto;color:var(--ash);min-width:0}
+  .back .tile{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-lg);background:var(--ink-1);box-shadow:inset 0 0 0 1px var(--hair-strong);color:var(--bone)}
+  .back b{color:var(--bone);font-weight:500}
+  /* A board photo: the box SAM found, cut from its frame (LectureNotes Crop). */
+  .crop{overflow:hidden;border-radius:var(--r-xl);background:var(--ink-2)}
+  .crop :is(svg,img){display:block;width:100%;height:auto}
+  time{font-variant-numeric:tabular-nums}
+  .katex{font-size:1.06em}
+}
+
+.fr-read{
+  &::before{content:"";position:fixed;inset:-20vh -10vw auto;height:70vh;pointer-events:none;z-index:-1;
+    background:radial-gradient(60% 60% at 50% 0%,color-mix(in srgb,var(--grad-2) 22%,transparent),transparent 70%)}
+  .top{justify-content:normal;padding:var(--space-4) var(--gutter)}
+  main.page{padding-top:0}
+
+  /* Save: one menu for every way out. */
+  .save{position:relative}
+  .save__menu{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(340px,calc(100vw - 2*var(--gutter)));padding:var(--space-2);border-radius:var(--r-2xl);display:none}
+  .save.open .save__menu{display:grid}
+  .save__menu>:is(a,button){display:grid;grid-template-columns:24px minmax(0,1fr);gap:2px var(--space-3);padding:var(--space-3);border:0;border-radius:var(--r-lg);background:none;color:var(--bone);font:inherit;text-align:left;cursor:pointer}
+  .save__menu>:is(a,button):hover{background:var(--ink-3)}
+  .save__menu span{grid-column:2;color:var(--ash);font-size:.875rem}
+
+  /* Source: the board photo behind a button, never on the page. */
+  .src{display:inline-flex;align-items:center;gap:var(--space-2);min-height:28px;padding:0 10px;margin:4px 6px 0 0;border:0;border-radius:var(--r-pill);background:var(--ink-2);box-shadow:inset 0 0 0 1px var(--hair-strong);color:var(--ash);font:inherit;font-size:.8125rem;cursor:pointer;white-space:nowrap}
+  .src:hover{color:var(--bone)}
+  .src .ic{width:16px;height:16px}
+
+  .exam{display:grid;gap:var(--space-2);align-content:start;padding:var(--space-6);border-radius:var(--r-2xl);background:var(--ink-1);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--grad-2) 70%,transparent)}
+  .exam .label{margin:0;color:var(--amber)}
+  .exam q{font-size:1.125rem;color:var(--bone)}
+  .exam>:is(span,button){justify-self:start;padding:0;border:0;background:none;color:var(--ash);font:inherit;text-align:left}
+  .exam>button{cursor:pointer}
+  .exam>button:hover{color:var(--bone)}
+  .keep{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+  .keep .hint{margin-right:auto}
+  .g-dot{fill:var(--bone);opacity:.85}
+
+  .said ol{display:grid;gap:var(--space-4);margin:0;padding:0;list-style:none}
+  .said li{display:grid;grid-template-columns:52px minmax(0,1fr);gap:var(--space-3);line-height:1.5}
+  .said time{color:var(--smoke);font-size:.8125rem;padding-top:3px}
+
+  /* Centred: the global reset drops the dialog's own margin:auto (the mockup's sat top left). */
+  #source{margin:auto;width:min(960px,calc(100vw - 2*var(--gutter)));max-width:none;padding:var(--space-4);border:0;border-radius:var(--r-3xl);color:var(--bone)}
+  #source::backdrop{background:color-mix(in srgb,var(--ink-0) 75%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  #source .cap{display:flex;align-items:center;gap:var(--space-4);margin-top:var(--space-4)}
+  #source .cap p{margin-right:auto;display:grid;gap:2px}
+  #source .cap span{color:var(--ash);font-size:.875rem}
+  .addto{display:grid;gap:var(--space-4)}
+  .addto>p:first-child{display:grid;gap:2px}
+  .addto>p:first-child span{color:var(--ash);font-size:.875rem}
+  .addto select{min-height:48px;padding:0 var(--space-3);border-radius:var(--r-lg);background:var(--ink-2);color:var(--bone);border:0;box-shadow:inset 0 0 0 1px var(--hair-strong);font:inherit}
+  .addto .cap{justify-content:flex-end}
+
+  /* This Lecture (manage-c.html, take C · Lecture Sheet): the "…" beside the title opens rename and delete. */
+  .ttl{display:flex;align-items:flex-start;gap:var(--space-4)}
+  .ttl h1{flex:1;min-width:0}
+  .more{display:grid;place-items:center;flex:none;width:64px;height:64px;border:0;border-radius:50%;background:var(--ink-1);box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--bone);cursor:pointer}
+  .more .ic{width:28px;height:28px}
+  .more:hover{background:var(--ink-2)}
+  #lect{width:min(36rem,calc(100vw - 2*var(--gutter)));max-width:none;margin:auto;padding:var(--space-8);border:0;border-radius:var(--r-3xl);color:var(--bone);font-size:1.25rem}
+  /* Wesley 2026-10-28: both delete buttons red with a black label (black reads better on the red than white). */
+  .cz-btn--danger,.ask .cz-btn--danger{background:var(--rose);color:#000;box-shadow:none}
+  #lect::backdrop{background:color-mix(in srgb,var(--ink-0) 75%,transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  #lect h2{font-size:clamp(2rem,4vw,2.5rem);letter-spacing:-.04em;line-height:1.05;margin-top:var(--space-2)}
+  #lect .fld{display:grid;gap:var(--space-2);margin-top:var(--space-6)}
+  #lect .fld span{color:var(--ash)}
+  #lect .cz-field{min-height:64px;font-size:1.25rem}
+  #lect .hint{font-size:1.25rem;margin-top:var(--space-2)}
+  #lect .when{color:var(--ash)}
+  #lect .held{display:grid;margin:var(--space-6) 0 0;padding:0;list-style:none}
+  #lect .held li{display:flex;justify-content:space-between;gap:var(--space-4);padding:var(--space-3) 0;border-top:1px solid var(--hair-strong)}
+  #lect .held b{font-weight:500;color:var(--ash);font-variant-numeric:tabular-nums}
+  #lect .acts{display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-8)}
+  #lect .acts .cz-btn{flex:1;min-height:64px;font-size:1.25rem;padding:0 var(--space-6);gap:var(--space-2)}
+  @media (max-width:640px){
+    #lect{width:100%;margin:auto 0 0;padding:var(--space-6) var(--gutter) var(--space-8);border-radius:var(--r-3xl) var(--r-3xl) 0 0}
+    #lect .acts{flex-direction:column-reverse}
+  }
+  /* The house confirm (globals dialog.ask) sized for Front Row: 20px text, 64px targets, amber focus (stage.css). */
+  dialog.ask.lv{width:min(34rem,calc(100vw - 2*var(--gutter)));font-size:1.25rem}
+  .lv h2{font-size:clamp(2rem,4vw,2.5rem);letter-spacing:-.04em;line-height:1.05}
+  .lv p{color:var(--ash);margin-top:var(--space-4)}
+  .lv p b{color:var(--bone);font-weight:500}
+  .lv ul{font-size:1.25rem;color:var(--bone)}
+  .lv li{grid-template-columns:24px minmax(0,1fr);align-items:center}
+  .lv li .ic{width:24px;height:24px}
+  .lv .cz-btn,.lv .cz-field{min-height:64px;font-size:1.25rem}
+  :focus-visible{outline:3px solid var(--amber);outline-offset:3px}
+}
+
+.fr-wait{
+  .hud{font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash);font-variant-numeric:tabular-nums}
+  .shell{position:fixed;inset:0;display:grid;grid-template-rows:auto auto minmax(0,1fr);padding:var(--space-4) var(--gutter) 92px;gap:var(--space-6)}
+  .bar1{display:flex;align-items:center;gap:var(--space-4)}
+  .bar1 .back{margin-right:0}
+  .bar1 h1{font-size:clamp(1.5rem,2.6vw,2.25rem);letter-spacing:-.04em;line-height:1;margin-right:auto}
+  .bar1 .err{color:var(--ash);font-size:.875rem}
+  .steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-3)}
+  .steps div{display:grid;gap:var(--space-2)}
+  .steps i{height:4px;border-radius:2px;background:var(--ink-3);overflow:hidden}
+  .steps i b{display:block;height:100%;width:calc(var(--f,0) * 100%);background:var(--grad-amber);transition:width .3s linear}
+  .steps span{font-size:.875rem;color:var(--smoke);display:flex;justify-content:space-between;gap:var(--space-2)}
+  .steps div.on span,.steps div.done span{color:var(--bone)}
+  .steps small{color:var(--ash);font-variant-numeric:tabular-nums}
+
+  .grid{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,5fr) minmax(0,4fr);gap:var(--space-4);min-height:0;position:relative}
+  .col{display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);min-height:0;padding:var(--space-6);border-radius:var(--r-3xl);background:var(--ink-1);box-shadow:inset 0 0 0 1px var(--hair-strong);overflow:hidden}
+  .col>header{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-3)}
+  .col>header b{font-size:1.125rem;font-weight:500;letter-spacing:-.02em}
+
+  /* Photos: board photos arrive one by one; the ones still being read wear the amber box. */
+  .photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:var(--space-3);overflow:auto}
+  .ph{position:relative;margin:0;animation:fr-in .35s var(--ease-standard) both}
+  .ph .crop{border-radius:var(--r-md)}
+  .ph.reading .crop{outline:2px solid var(--amber);outline-offset:2px}
+  .ph figcaption{margin-top:6px;font-size:.75rem;color:var(--ash);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between}
+  .ph.read figcaption b{color:var(--emerald);font-weight:500}
+
+  /* Board → maths */
+  .read{display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);min-height:0}
+  .read .big{position:relative}
+  .read .big .crop{border-radius:var(--r-xl)}
+  .read .big .tag{position:absolute;left:10px;top:10px;padding:3px 10px;border-radius:var(--r-pill);background:var(--amber);color:var(--on-amber);font-size:.75rem;font-weight:500}
+  .read .big:not(:has(.crop)){min-height:120px;border-radius:var(--r-xl);background:var(--ink-2)}
+  .maths{display:grid;align-content:start;gap:var(--space-3);overflow:auto}
+  .ln{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:center;padding:var(--space-3) var(--space-4);border-radius:var(--r-lg);background:var(--ink-2);animation:fr-in .3s both}
+  .ln code{font:400 .875rem/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ash);white-space:pre-wrap;word-break:break-word}
+  .ln .out{font-size:1.125rem;min-width:0}
+  .ln.txt .out{font-size:.9375rem;color:var(--bone)}
+
+  /* Transcript */
+  .tx{display:grid;align-content:start;gap:var(--space-4);overflow:auto}
+  .tx p{display:grid;grid-template-columns:52px minmax(0,1fr);gap:var(--space-3);font-size:1rem;line-height:1.5;color:var(--bone);animation:fr-in .3s both}
+  .tx p time{color:var(--smoke);font-size:.8125rem;padding-top:3px}
+  .tx p .who{display:block;font-size:.6875rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash)}
+
+  /* Notes: slide in over the board and transcript columns. */
+  .notes{position:absolute;top:0;bottom:0;right:0;width:calc((100% - 2*var(--space-4)) * 9 / 12 + var(--space-4));display:grid;grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);padding:var(--space-8);border-radius:var(--r-3xl);background:var(--ink-1);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--grad-2) 55%,transparent);opacity:0;translate:24px 0;pointer-events:none;transition:opacity .5s,translate .6s var(--ease-standard)}
+  &.writing .notes{opacity:1;translate:0 0;pointer-events:auto}
+  .notes>header{display:flex;justify-content:space-between}
+  .notes .doc{overflow:auto;display:grid;align-content:start;gap:var(--space-4)}
+  .doc h2{font-size:clamp(2rem,3.4vw,3rem);letter-spacing:-.045em;line-height:1}
+  .doc h3{font-size:1.375rem;font-weight:500;letter-spacing:-.02em;margin-top:var(--space-2)}
+  .doc p,.doc li{color:var(--ash);font-size:1.0625rem;line-height:1.55;max-width:70ch}
+  .doc p.sum{color:var(--bone);font-size:1.25rem}
+  .doc ul{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-2)}
+  .doc li b{color:var(--bone);font-weight:500}
+  .doc .ex{display:flex;gap:var(--space-3);align-items:baseline;color:var(--bone)}
+  .doc .ex>span:first-child{padding:2px 10px;border-radius:var(--r-pill);background:var(--grad-amber);color:var(--on-amber);font-size:.8125rem;font-weight:500;white-space:nowrap}
+  .doc>*{animation:fr-rise .45s var(--ease-standard) both}
+
+  @media (max-width:900px){
+    .shell{position:static;min-height:100svh}
+    .grid{grid-template-columns:minmax(0,1fr)}
+    .col{max-height:46svh}
+    .photos{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .notes{position:fixed;inset:auto var(--space-3) 84px;top:96px;width:auto;z-index:5}
+    .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .steps span small{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+}
+@keyframes fr-in{from{opacity:0;transform:scale(.96)}}
+@keyframes fr-rise{from{opacity:0;translate:0 8px}}

@@ -4,8 +4,8 @@ import { meta } from "./meta";
 /** Pixel corners in a w×h frame, as SAM 3.1 reports them. */
 export type Box = { x1: number; y1: number; x2: number; y2: number; w: number; h: number };
 
-// Untested live as one combined prompt (only "whiteboard" was); change after the real-lecture check.
-const BOARD_PROMPT = "whiteboard, blackboard or projector screen";
+// SAM 3.1 takes one noun phrase: the combined list found nothing on a real chalkboard (2026-10-28), so each is asked.
+const BOARDS = ["blackboard", "whiteboard", "projector screen"];
 
 /** Every `<|box;...|>` in a SAM output stream; masks ignored. */
 export function parseSam(text: string): Box[] {
@@ -46,7 +46,8 @@ async function sam(text: string, frameUrl: string): Promise<Box[]> {
 }
 
 export async function locate(frameUrl: string): Promise<{ board: Box | null; person: Box | null }> {
-  const [boards, people] = await Promise.all([sam(BOARD_PROMPT, frameUrl), sam("person", frameUrl)]);
+  const [people, ...found] = await Promise.all([sam("person", frameUrl), ...BOARDS.map((b) => sam(b, frameUrl))]);
+  const boards = found.flat();
   const area = (b: Box) => (b.x2 - b.x1) * (b.y2 - b.y1);
   const board = boards.reduce<Box | null>((a, b) => (a && area(a) >= area(b) ? a : b), null);
   return { board, person: board && pickProfessor(people, board) };

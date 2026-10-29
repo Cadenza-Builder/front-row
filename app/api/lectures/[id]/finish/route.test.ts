@@ -12,24 +12,23 @@ import { POST } from "./route";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const OTHER = "00000000-0000-4000-8000-0000000000b2";
-const WEEK = "d0000000-0000-4000-8000-00000000000d";
 const LEC = "e0000000-0000-4000-8000-00000000000e";
 const FOREIGN = "e1000000-0000-4000-8000-00000000000e";
+const COURSE = "f0000000-0000-4000-8000-00000000000f";
 const DONE = { turns: [{ t: 0, text: "Today: elasticity." }], frames: [], snaps: [] };
 
-function setup(lecture: Record<string, unknown> = {}, weekOwner = ME) {
+function setup(lecture: Record<string, unknown> = {}) {
   const db = fakeClient(
     {
-      weeks: [{ id: WEEK, user_id: weekOwner, course_id: "c1", number: 3, topic: "Demand", keywords: [] }],
+      lecture_courses: [{ id: COURSE, user_id: ME, name: "ECO101", keywords: ["elasticity"], meets: null }],
       lectures: [
-        { id: LEC, user_id: ME, week_id: WEEK, course_label: "ECO101", status: "recording", file_id: null, ...lecture },
-        { id: FOREIGN, user_id: OTHER, week_id: null, course_label: "MAT135", status: "recording", file_id: null },
+        { id: LEC, user_id: ME, lecture_course_id: COURSE, number: 1, week_id: null, status: "recording", file_id: null, ...lecture },
+        { id: FOREIGN, user_id: OTHER, lecture_course_id: "theirs", number: 1, week_id: null, status: "recording", file_id: null },
       ],
       lecture_segments: [
         { lecture_id: LEC, user_id: ME, n: 0, status: "done", result: DONE },
         { lecture_id: LEC, user_id: ME, n: 1, status: "uploaded", result: { frames: [{ t: 130, changed: true }] } },
       ],
-      files: [{ id: "slides", user_id: weekOwner, week_id: WEEK, origin: "upload", text: "Elasticity slides" }],
     },
     [`${ME}/${LEC}/0.wav`, `${ME}/${LEC}/1.wav`, `${ME}/${LEC}/1-130.jpg`],
   );
@@ -43,20 +42,29 @@ const post = (id: string, body: unknown = { segmentCount: 2 }) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("FRONT_ROW_PUBLIC", "1");
   h.processSegment.mockResolvedValue(DONE);
-  h.finishLecture.mockResolvedValue({ notes: { title: "n" }, snaps: [], markdown: "# Notes" });
+  h.finishLecture.mockResolvedValue({ notes: { title: "Price elasticity" }, snaps: [], markdown: "# Notes" });
 });
 
-test("finish processes the segment not done, writes the notes file and drops the audio", async () => {
+test("finish processes the segment not done, titles the lecture from the notes and drops the audio", async () => {
   const db = setup();
   expect(await (await post(LEC)).json()).toEqual({ status: "ready" });
   expect(h.processSegment).toHaveBeenCalledOnce();
-  expect(h.finishLecture).toHaveBeenCalledWith([DONE, DONE], "ECO101", "Elasticity slides");
-  const file = db.tables.files.find((f) => f.origin === "lecture");
-  expect(file).toMatchObject({ user_id: ME, week_id: WEEK, course_id: "c1", detected_type: "notes", text: "# Notes" });
-  expect(h.indexFiles).toHaveBeenCalledOnce();
-  expect(db.tables.lectures.find((l) => l.id === LEC)).toMatchObject({ status: "ready", file_id: file?.id });
+  expect(h.processSegment).toHaveBeenCalledWith(expect.objectContaining({ keywords: ["elasticity"] }));
+  expect(h.finishLecture).toHaveBeenCalledWith([DONE, DONE], "ECO101", "", ["elasticity"]);
+  expect(db.tables.lectures.find((l) => l.id === LEC)).toMatchObject({ status: "ready", title: "Price elasticity", notes: { title: "Price elasticity" } });
+  // The notes go into Cadenza only through Add to Cadenza.
+  expect(db.tables.files ?? []).toEqual([]);
   expect([...db.stored]).toEqual([`${ME}/${LEC}/1-130.jpg`]);
+});
+
+test("a closed Front Row is a 404 before anything runs", async () => {
+  vi.stubEnv("FRONT_ROW_PUBLIC", "");
+  const db = setup();
+  expect((await post(LEC)).status).toBe(404);
+  expect(db.tables.lectures.find((l) => l.id === LEC)?.status).toBe("recording");
+  vi.stubEnv("FRONT_ROW_PUBLIC", "1");
 });
 
 test("finish twice composes once", async () => {
@@ -79,14 +87,6 @@ test("finish failure sets failed and keeps the wavs", async () => {
   expect((await (await post(LEC)).json()).status).toBe("failed");
   expect(db.tables.lectures.find((l) => l.id === LEC)).toMatchObject({ status: "failed", error: expect.any(String) });
   expect(db.stored.has(`${ME}/${LEC}/0.wav`)).toBe(true);
-  expect(db.tables.files.filter((f) => f.origin === "lecture")).toEqual([]);
-});
-
-test("a class member finishes on the teacher's week: the teacher's material is the context, the notes file is the member's", async () => {
-  const db = setup({}, OTHER);
-  expect(await (await post(LEC)).json()).toEqual({ status: "ready" });
-  expect(h.finishLecture).toHaveBeenCalledWith([DONE, DONE], "ECO101", "Elasticity slides");
-  expect(db.tables.files.find((f) => f.origin === "lecture")).toMatchObject({ user_id: ME, week_id: WEEK });
 });
 
 test("a finish killed mid-way is taken over after 6 minutes, never sooner", async () => {

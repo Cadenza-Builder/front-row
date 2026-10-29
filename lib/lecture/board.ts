@@ -2,6 +2,7 @@ import type { ResponseInputImage } from "openai/resources/responses/responses";
 import { z } from "zod";
 import type { Box } from "./locate";
 import { meta } from "./meta";
+import type { Turn } from "./transcribe";
 
 /** One sampled video frame, `t` seconds from lecture start, with what locate() found in it. */
 export type Frame = { t: number; url: string; board: Box | null; person: Box | null; changed: boolean };
@@ -9,13 +10,22 @@ export type Snapshot = { t: number; url: string; board: Box; markdown: string; a
 
 export const BoardReading = z.object({ markdown: z.string(), alt: z.string().max(200) });
 
-const PROMPT = (b: Box) =>
+const PROMPT = (b: Box, said: string) =>
   `The lecture board is the region x1=${b.x1};y1=${b.y1};x2=${b.x2};y2=${b.y2} (pixels) of this frame. ` +
   "Transcribe everything written on it as Markdown, in reading order. Write all math as LaTeX in $...$ " +
   "(inline) or $$...$$ (display). Ignore the people and anything outside the board. " +
-  "In alt, describe the board for a screen reader in under 200 characters.";
+  "The handwriting may be rushed: use what the professor said around this moment (below) to settle unclear symbols and words. " +
+  "Write [unreadable] for anything you still cannot read; never guess. " +
+  `In alt, describe the board for a screen reader in under 200 characters.\n\nSaid around this moment:\n${said || "(no speech)"}`;
 
-export async function readBoard(frame: Frame & { board: Box }): Promise<Snapshot> {
+/** `turns` are the segment's; only those within NEAR seconds of the frame go to the model. */
+const NEAR = 30;
+
+export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): Promise<Snapshot> {
+  const said = turns
+    .filter((t) => t.end >= frame.t - NEAR && t.start <= frame.t + NEAR)
+    .map((t) => t.text)
+    .join("\n");
   const res = await meta().responses.create({
     model: "muse-spark-1.3",
     input: [
@@ -23,7 +33,7 @@ export async function readBoard(frame: Frame & { board: Box }): Promise<Snapshot
         type: "message",
         role: "user",
         content: [
-          { type: "input_text", text: PROMPT(frame.board) },
+          { type: "input_text", text: PROMPT(frame.board, said) },
           // SDK types demand `detail`; the request verified live sent none.
           { type: "input_image", image_url: frame.url } as ResponseInputImage,
         ],

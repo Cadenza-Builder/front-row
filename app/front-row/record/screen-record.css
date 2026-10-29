@@ -1,0 +1,67 @@
+/* Front Row · Record (mockups/front-row/record.html). Full screen over the camera; every rule is under .s-record so the
+   generic names (.toast, .dock, .ask) never reach another screen. */
+.s-record{position:fixed;inset:0;overflow:hidden;background:#000}
+.s-record .cam{position:fixed;inset:0;background:#000}
+.s-record .cam video,.s-record .cam img.still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.s-record .cam canvas{position:absolute;inset:0;width:100%;height:100%}
+.s-record .snap-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.s-record .snap-flash.go{animation:fr-flash .5s ease-out}
+@keyframes fr-flash{20%{opacity:.35}}
+.s-record .shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(rgba(0,0,0,.55),transparent 22%,transparent 70%,rgba(0,0,0,.7))}
+
+/* Viewfinder chrome, as on the landing. */
+.s-record .br{position:fixed;width:44px;height:44px;border:2px solid var(--amber);pointer-events:none;z-index:3}
+.s-record .br:nth-of-type(1){left:var(--space-4);top:var(--space-4);border-right:0;border-bottom:0;border-top-left-radius:14px}
+.s-record .br:nth-of-type(2){right:var(--space-4);top:var(--space-4);border-left:0;border-bottom:0;border-top-right-radius:14px}
+.s-record .br:nth-of-type(3){left:var(--space-4);bottom:var(--space-4);border-right:0;border-top:0;border-bottom-left-radius:14px}
+.s-record .br:nth-of-type(4){right:var(--space-4);bottom:var(--space-4);border-left:0;border-top:0;border-bottom-right-radius:14px}
+.s-record .recdot{flex:none;display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--rose);box-shadow:0 0 0 0 color-mix(in srgb,var(--rose) 60%,transparent);animation:fr-rec 1.6s infinite}
+@keyframes fr-rec{70%{box-shadow:0 0 0 10px transparent}}
+.s-record .hud{position:fixed;z-index:4;font-size:.8125rem;letter-spacing:.08em;text-transform:uppercase;font-variant-numeric:tabular-nums;color:var(--bone)}
+.s-record .tl{left:calc(var(--space-4) + var(--space-6));top:calc(var(--space-4) + var(--space-4));display:flex;align-items:center;gap:var(--space-3)}
+.s-record .tl span{color:var(--ash)}
+.s-record .tr{right:calc(var(--space-4) + var(--space-6));top:calc(var(--space-4) + var(--space-4));display:flex;gap:var(--space-6);color:var(--ash)}
+.s-record .tr b{color:var(--bone);font-weight:500}
+.s-record .lvl{display:inline-flex;align-items:flex-end;gap:2px;height:12px;margin-left:var(--space-2);vertical-align:-1px}
+.s-record .lvl i{width:3px;border-radius:1px;background:var(--emerald);height:calc(var(--v,0) * 100%);min-height:2px;transition:height 80ms}
+.s-record .toast{position:fixed;z-index:4;left:50%;top:calc(var(--space-4) + 56px);translate:-50% -10px;display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) var(--space-4) var(--space-2) var(--space-2);border-radius:var(--r-pill);opacity:0;transition:opacity .3s,translate .3s;font-size:.875rem;white-space:nowrap}
+.s-record .toast.on{opacity:1;translate:-50% 0}
+.s-record .toast canvas{width:64px;height:36px;border-radius:var(--r-sm);display:block}
+.s-record .toast b{font-weight:500}
+.s-record .toast span{color:var(--ash)}
+.s-record .dock{position:fixed;z-index:4;left:50%;bottom:calc(var(--space-4) + 76px);translate:-50% 0;display:flex;gap:var(--space-3);padding:var(--space-2);border-radius:var(--r-pill)}
+.s-record .ctl{display:inline-flex;align-items:center;gap:var(--space-2);min-height:56px;padding:0 var(--space-6) 0 var(--space-4);border:0;border-radius:var(--r-pill);background:var(--ink-1);box-shadow:inset 0 0 0 1px var(--rule);color:var(--bone);font:inherit;font-weight:500;cursor:pointer;transition:transform var(--dur-press) ease-out}
+.s-record .ctl:active{transform:scale(.97)}
+.s-record .ctl .ic{width:22px;height:22px}
+.s-record .ctl .r{display:none;fill:currentColor;stroke:none}
+.s-record .ctl.on .p{display:none}
+.s-record .ctl.on .r{display:block}
+.s-record .ctl.on{background:var(--bone);color:var(--ink-0)}
+.s-record .ctl.stop{color:var(--rose);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rose) 55%,transparent)}
+.s-record .ctl.stop rect{fill:currentColor;stroke:none}
+.s-record .paused{position:fixed;inset:0;z-index:2;display:grid;place-content:center;justify-items:center;gap:var(--space-2);background:color-mix(in srgb,#000 74%,transparent);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .25s}
+.s-record .paused b{font-size:clamp(2.5rem,7vw,5rem);font-weight:300;letter-spacing:-.05em}
+.s-record .paused span{color:var(--ash)}
+.s-record.is-paused .paused{opacity:1}
+.s-record.is-paused .recdot{animation:none;background:var(--smoke)}
+/* The dialog box itself is globals.css dialog.ask, as in the mockup. */
+.s-record .ask h2{font-size:clamp(2rem,4vw,2.75rem);letter-spacing:-.04em;line-height:1}
+.s-record .ask p{color:var(--ash);margin:var(--space-4) 0 var(--space-8)}
+.s-record .ask p b{color:var(--bone);font-weight:500;font-variant-numeric:tabular-nums}
+.s-record .ask .row{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.s-record .ask .row .cz-btn{flex:1 1 auto}
+.s-record .state{position:fixed;z-index:4;left:calc(var(--space-4) + var(--space-6));bottom:calc(var(--space-4) + 140px);display:grid;gap:var(--space-2)}
+.s-record .state span{display:flex;align-items:center;gap:var(--space-2);font-size:.8125rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ash)}
+.s-record .state span b{color:var(--bone);font-weight:500}
+.s-record .state span i{width:8px;height:8px;border-radius:50%;background:var(--smoke)}
+.s-record .state span.on i{background:var(--amber)}
+
+/* Start: browsers only open the camera after a tap. */
+.s-record .start{position:fixed;inset:0;z-index:6;display:grid;place-content:center;justify-items:center;gap:var(--space-6);padding:var(--gutter);text-align:center;background:color-mix(in srgb,#000 70%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.s-record .start h1{font-size:clamp(2.25rem,5vw,4rem);line-height:.95;letter-spacing:-.05em}
+.s-record .start p{color:var(--ash);font-size:1.125rem}
+.s-record .start .row{display:flex;flex-wrap:wrap;gap:var(--space-3);justify-content:center}
+.s-record .start small{color:var(--smoke)}
+.s-record .start .err{color:var(--rose)}
+@media (max-width:640px){.s-record .hud .wide{display:none}.s-record .tr{gap:var(--space-4)}.s-record .dock{bottom:calc(var(--space-4) + 70px)}.s-record .state{bottom:calc(var(--space-4) + 150px)}}
+@media (prefers-reduced-motion:reduce){.s-record .recdot{animation:none}}

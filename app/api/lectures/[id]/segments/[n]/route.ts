@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { saveSegment } from "@/lib/lectures/store";
+import { frontRowOpen } from "@/lib/lectures/open";
 import { getUser } from "@/lib/supabase/server";
 
 // Transcribing two minutes and reading its boards runs in this request.
@@ -7,6 +8,7 @@ export const maxDuration = 300;
 
 export async function POST(request: Request, ctx: RouteContext<"/api/lectures/[id]/segments/[n]">) {
   const { supabase, userId } = await getUser();
+  if (!frontRowOpen(userId ?? undefined)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // JSON only: a cross-site form can post text/plain without a preflight.
   if (!request.headers.get("content-type")?.startsWith("application/json")) return NextResponse.json({ error: "Send JSON" }, { status: 415 });
