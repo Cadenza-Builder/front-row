@@ -4,6 +4,7 @@ import { refused } from "@/lib/billing/plans";
 import { indexFiles } from "@/lib/companion/search";
 import { finishLecture, processSegment, toMarkdown, type Notes, type Snapshot } from "@/lib/lecture";
 import { SOMETHING_WRONG } from "@/lib/runs/startRun";
+import { removeFolder } from "@/lib/account/deleteAccount";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { notesDocx, notesPdf } from "./export";
@@ -184,12 +185,7 @@ export async function deleteLecture(supabase: Db, userId: string, id: string): P
   if (!lecture) return NOT_FOUND;
   // The browser cannot delete a lecture, so its files never outlive it: they go first, then the row, as the server.
   const admin = createAdminClient();
-  const dir = `${userId}/${id}`;
-  const names = await listAll(admin, dir);
-  if (names.length) {
-    const { error } = await admin.storage.from("lectures").remove(names.map((n) => `${dir}/${n}`));
-    if (error) throw error;
-  }
+  await removeFolder(admin, `${userId}/${id}`, "lectures"); // paged: storage removes at most 1000 per call
   // The Add to Cadenza copy is a file in the student's week: it stays, as the delete sheet says.
   await admin.from("lectures").delete().eq("id", id).eq("user_id", userId).throwOnError();
   return { code: 200, body: {} };

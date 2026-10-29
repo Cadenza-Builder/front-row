@@ -28,7 +28,7 @@ function overlap(a: Box, b: Box) {
   const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
   return (x * y) / (b.w * b.h);
 }
-// lib/lecture/locate.ts pickProfessor's rule: the person whose centre is inside the board's span, highest up.
+// On the phone: the person whose centre is inside the board's width, highest up (the server's pickProfessor in lib/lecture/locate.ts differs).
 function pickProfessor(people: (Box & { l: Landmark[] })[], board: Box) {
   const at = people.filter((p) => p.x + p.w / 2 > board.x && p.x + p.w / 2 < board.x + board.w);
   return (at.length ? at : people).sort((a, b) => a.y - b.y)[0] ?? null;

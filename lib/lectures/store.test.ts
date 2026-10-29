@@ -108,6 +108,14 @@ test("delete removes the lecture's objects and row as the server (the browser ma
   expect(admin.tables.files).toHaveLength(1);
 });
 
+test("delete removes a long lecture's files in pages of at most 1000 (a 3-hour lecture has over 1000 photos)", async () => {
+  const objs = Array.from({ length: 1001 }, (_, i) => `${ME}/${LEC}/0-${i * 10}.jpg`);
+  const admin = use(fakeClient(seed(), objs));
+  expect((await deleteLecture(fakeClient(seed(), objs).client, ME, LEC)).code).toBe(200);
+  expect(admin.bucket.remove.mock.calls.map(([ps]) => ps.length)).toEqual([1000, 1]);
+  expect(admin.stored.size).toBe(0);
+});
+
 test("rename sets the title of the caller's lecture only", async () => {
   const db = use(fakeClient(seed()));
   expect((await renameLecture(db.client, ME, LEC, { title: "  Supply shocks " })).code).toBe(200);

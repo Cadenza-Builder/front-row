@@ -198,7 +198,7 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
           </button>
           <div className="save__menu glass">
             {add("", <><svg className="ic" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2zM4 19V5" /></svg>{L.linked ? "In Cadenza" : "Add to Cadenza"}<span>{`${L.linked?.label ?? "Pick a week"} · your lesson and practice use them`}</span></>)}
-            <a href={exp("pdf")}><svg className="ic" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z" /><path d="M14 3v4h4" /></svg>Download PDF<span>Board photos and maths included</span></a>
+            <a href={exp("pdf")}><svg className="ic" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z" /><path d="M14 3v4h4" /></svg>Download PDF<span>Board text and maths included</span></a>
             <a href={exp("docx")}><svg className="ic" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z" /><path d="M14 3v4h4M9 12l1 5 2-4 2 4 1-5" /></svg>Download Word<span>Opens in Google Docs too</span></a>
           </div>
         </div>
