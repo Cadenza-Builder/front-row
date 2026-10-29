@@ -78,7 +78,7 @@ describe("finishLecture", () => {
     expect(sent.keywords).toEqual(["OLS"]);
     expect(sent.turns.map((t) => [t.text, t.snap])).toEqual([["a", null], ["b", 0], ["c", 1]]);
     expect(out.snaps.map((s) => s.t)).toEqual([10, 130]);
-    expect(out.markdown).toContain("board 130");
+    expect(out.markdown).not.toContain("board 130");
     expect(out.usage).toEqual({ "muse-spark-1.3": { in: 1, out: 2 } });
   });
 });

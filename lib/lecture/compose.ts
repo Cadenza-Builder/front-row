@@ -116,14 +116,12 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
   return { notes, usage: { "muse-spark-1.3": { in: res.usage?.input_tokens ?? 0, out: res.usage?.output_tokens ?? 0 } } };
 }
 
-/** Plain markdown for the `files.text` row: board markdown stands in for the images. */
-export function toMarkdown(notes: Notes, snaps: Snapshot[]): string {
-  const shown = new Set<number>();
-  const sections = notes.sections.map((sec) => {
-    // Each board snapshot is printed once, at its first reference.
-    const boards = sec.snaps.filter((i) => !shown.has(i) && shown.add(i)).map((i) => snaps[i].markdown);
-    return [`## ${sec.heading}`, sec.body, ...boards, ...(sec.boxes ?? []).map(boxMarkdown), ...sec.exam.map((e) => `Exam: ${e.quote}`)].join("\n\n");
-  });
+/** Plain markdown for the `files.text` row and the exports. No raw board readings: they carry [unreadable], repeats and
+ * their own headings, and the notes and boxes already hold what the board said. */
+export function toMarkdown(notes: Notes): string {
+  const sections = notes.sections.map((sec) =>
+    [`## ${sec.heading}`, sec.body, ...(sec.boxes ?? []).map(boxMarkdown), ...sec.exam.map((e) => `Exam: ${e.quote}`)].join("\n\n"),
+  );
   const words = notes.words.length ? ["## Terms", notes.words.map((w) => `- **${w.term}**: ${w.meaning}`).join("\n")] : [];
   const together = notes.together ? ["## Putting it together", notes.together] : [];
   return [`# ${notes.title}`, notes.summary, ...sections, ...words, ...together].join("\n\n") + "\n";
