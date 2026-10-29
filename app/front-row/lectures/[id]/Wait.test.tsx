@@ -75,3 +75,10 @@ test("a lecture never sent for notes offers Write Notes after a few seconds, wit
   expect(fetch).toHaveBeenCalledWith("/api/lectures/l1/finish", expect.objectContaining({ body: JSON.stringify({ segmentCount: 2 }) }));
   vi.unstubAllGlobals();
 });
+
+test("a lecture still recording with nothing uploaded says so instead of waiting forever", async () => {
+  const { getByRole, queryByRole } = render(<Wait id="l1" dir="u/l1" initial={{ ...lec("recording"), segment_count: 0 }} segments={[]} srcs={{}} />);
+  for (let i = 0; i < 30; i++) await act(() => vi.advanceTimersByTimeAsync(250));
+  expect(getByRole("alert").textContent).toBe("Nothing from this lecture reached Front Row.");
+  expect(queryByRole("button", { name: "Write Notes" })).toBeNull();
+});

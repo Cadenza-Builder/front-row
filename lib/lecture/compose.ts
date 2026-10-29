@@ -88,13 +88,14 @@ const PROMPT =
 
 const s = (t: number) => `${Math.round(t)}s`;
 
-export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; course: string; context: string; keywords: string[] }): Promise<Notes> {
+/** The notes, and the tokens they cost per model (what Cadenza's `runs.usage` stores). */
+export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; course: string; keywords: string[] }) {
   const board = input.snaps.map((sn, i) => `### Snapshot ${i} at ${s(sn.t)}\n${sn.markdown}`).join("\n\n") || "(no board)";
   const speech =
     input.turns.map((t) => `[${s(t.start)}-${s(t.end)} snap=${t.snap ?? "none"} pointing=${t.pointing ?? "none"}] ${t.text}`).join("\n") ||
     "(no speech captured)";
   const text =
-    `${PROMPT}\n\nCourse: ${input.course}\n\nKeywords: ${input.keywords.join(", ") || "(none)"}\n\n## Course material this week\n${input.context.slice(0, 20_000) || "(none)"}` +
+    `${PROMPT}\n\nCourse: ${input.course}\n\nKeywords: ${input.keywords.join(", ") || "(none)"}` +
     `\n\n## Board\n${board}\n\n## Transcript\n${speech}`;
   const res = await meta().responses.create({
     model: "muse-spark-1.3",
@@ -112,7 +113,7 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
   // An invented snapshot index is dropped, never fatal: a lecture with no board must still get notes.
   for (const sec of notes.sections) sec.snaps = sec.snaps.filter((i) => Number.isInteger(i) && i >= 0 && i < input.snaps.length);
   if (!notes.together?.trim()) delete notes.together;
-  return notes;
+  return { notes, usage: { "muse-spark-1.3": { in: res.usage?.input_tokens ?? 0, out: res.usage?.output_tokens ?? 0 } } };
 }
 
 /** Plain markdown for the `files.text` row: board markdown stands in for the images. */

@@ -67,17 +67,18 @@ describe("processSegment later segments", () => {
 describe("finishLecture", () => {
   it("finishLecture joins turns across segments", async () => {
     const snap = (t: number): Snapshot => ({ t, url: "", board, markdown: `board ${t}`, alt: "" });
-    vi.mocked(compose).mockResolvedValue({ title: "T", summary: "S", sections: [{ heading: "H", body: "B", snaps: [0, 1], exam: [] }], words: [] });
+    vi.mocked(compose).mockResolvedValue({ notes: { title: "T", summary: "S", sections: [{ heading: "H", body: "B", snaps: [0, 1], exam: [] }], words: [] }, usage: { "muse-spark-1.3": { in: 1, out: 2 } } });
     const segments = [
       { turns: [{ start: 0, end: 60, text: "a" }, { start: 60, end: 121, text: "b" }], frames: [], snaps: [snap(10)] },
       // Overlap: "b" again (ends before 121) is dropped.
       { turns: [{ start: 119, end: 120.5, text: "b" }, { start: 131, end: 150, text: "c" }], frames: [], snaps: [snap(130)] },
     ];
-    const out = await finishLecture(segments, "ECO220", "", ["OLS"]);
+    const out = await finishLecture(segments, "ECO220", ["OLS"]);
     const sent = vi.mocked(compose).mock.calls[0][0];
     expect(sent.keywords).toEqual(["OLS"]);
     expect(sent.turns.map((t) => [t.text, t.snap])).toEqual([["a", null], ["b", 0], ["c", 1]]);
     expect(out.snaps.map((s) => s.t)).toEqual([10, 130]);
     expect(out.markdown).toContain("board 130");
+    expect(out.usage).toEqual({ "muse-spark-1.3": { in: 1, out: 2 } });
   });
 });

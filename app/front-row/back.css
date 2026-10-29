@@ -1,0 +1,4 @@
+/* The back link on Tour, Wait and Read: the same in all three mockups. */
+:is(.s-fr-tour,.fr-read,.fr-wait) .back{display:flex;align-items:center;gap:var(--space-3);margin-right:auto;color:var(--ash);min-width:0}
+:is(.s-fr-tour,.fr-read,.fr-wait) .back .tile{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-lg);background:var(--ink-1);box-shadow:inset 0 0 0 1px var(--hair-strong);color:var(--bone)}
+:is(.s-fr-tour,.fr-read,.fr-wait) .back b{color:var(--bone);font-weight:500}

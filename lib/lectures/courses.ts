@@ -4,6 +4,7 @@ import { extractText } from "@/lib/extract/extractText";
 import { isTextLayerSufficient, pdfTextLayer } from "@/lib/extract/pdf";
 import { UploadError, validateUpload } from "@/lib/extract/validate";
 import { meta } from "@/lib/lecture/meta";
+import { runTokens } from "@/lib/openai/client";
 import { SOMETHING_WRONG } from "@/lib/runs/startRun";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
@@ -98,7 +99,8 @@ export async function readSyllabus(supabase: Db, userId: string, id: string, fil
     const meets = out.meets.filter((m) => Number.isInteger(m.weekday) && m.weekday >= 0 && m.weekday <= 6 && Number.isInteger(m.minutes) && m.minutes >= 0 && m.minutes < 1440);
     const keywords = [...new Set(out.keywords.map((k) => k.trim().slice(0, 80)).filter(Boolean))].slice(0, 100);
     await admin.from("lecture_courses").update({ meets: meets.length ? meets : null, keywords }).eq("id", id).eq("user_id", userId).throwOnError();
-    await admin.from("runs").update({ status: "done", finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
+    const usage = { "muse-spark-1.3": { in: res.usage?.input_tokens ?? 0, out: res.usage?.output_tokens ?? 0 } };
+    await admin.from("runs").update({ status: "done", ...runTokens(usage), finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
     return { code: 200, body: { meets: meets.length ? meets : null, keywords } };
   } catch (err) {
     console.error(`[lecture-courses] syllabus for ${id} failed`, err);

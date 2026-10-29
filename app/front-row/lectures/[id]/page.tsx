@@ -7,6 +7,7 @@ import { LectureNotes } from "./LectureNotes";
 import { progress } from "./progress";
 import { Wait } from "./Wait";
 import "../../../courses/[id]/weeks/[n]/learn/screen-learn.css";
+import "../../back.css";
 import "./front-row.css";
 
 export const metadata = { title: "Lecture Notes" };

@@ -1,9 +1,6 @@
 /* Front Row's lecture screens: Wait (mockups/front-row/wait.html, take Live Pipeline) and Read (read.html, on top of
    screen-learn.css), with the shared pieces of the mockups' stage.css. Scoped to .fr-wait / .fr-read; keyframes fr-. */
 :is(.fr-read,.fr-wait){
-  .back{display:flex;align-items:center;gap:var(--space-3);margin-right:auto;color:var(--ash);min-width:0}
-  .back .tile{display:grid;place-items:center;width:44px;height:44px;border-radius:var(--r-lg);background:var(--ink-1);box-shadow:inset 0 0 0 1px var(--hair-strong);color:var(--bone)}
-  .back b{color:var(--bone);font-weight:500}
   /* A board photo: the box SAM found, cut from its frame (LectureNotes Crop). */
   .crop{overflow:hidden;border-radius:var(--r-xl);background:var(--ink-2)}
   .crop :is(svg,img){display:block;width:100%;height:auto}

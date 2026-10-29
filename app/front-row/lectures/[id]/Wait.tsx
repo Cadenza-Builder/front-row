@@ -111,7 +111,13 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
         <div className="bar1">
           <Link className="back" href="/front-row/home" aria-label="Home"><span className="tile"><svg className="ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></span></Link>
           {/* Still recording after the reveal: the phone's finish never landed (offline at Stop, or Back mid-lecture). */}
-          {lec.status === "recording" && tick >= TICKS && rows.length > 0 ? (
+          {/* No part landed at all: there is nothing to write notes from, so no button. */}
+          {lec.status === "recording" && tick >= TICKS && !rows.length ? (
+            <>
+              <h1><span className="light">Notes</span> <span className="cz-grad">not started.</span></h1>
+              <span className="err" role="alert">Nothing from this lecture reached Front Row.</span>
+            </>
+          ) : lec.status === "recording" && tick >= TICKS ? (
             <>
               <h1><span className="light">Notes</span> <span className="cz-grad">not started.</span></h1>
               <span className="err" role="alert">This lecture was never sent for notes.</span>

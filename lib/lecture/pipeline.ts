@@ -1,5 +1,5 @@
 import { pickSnapshots, readBoard, type Frame, type Snapshot } from "./board";
-import { compose, toMarkdown, type Notes } from "./compose";
+import { compose, toMarkdown } from "./compose";
 import { link } from "./link";
 import { locate } from "./locate";
 import { joinTurns, transcribe, type Turn } from "./transcribe";
@@ -33,13 +33,12 @@ function warn<T>(t: number, step: string, e: unknown, fallback: T): T {
 export async function finishLecture(
   segments: Segment[],
   course: string,
-  context: string,
   keywords: string[],
-): Promise<{ notes: Notes; snaps: Snapshot[]; markdown: string }> {
+) {
   const byTime = (a: { t: number }, b: { t: number }) => a.t - b.t;
   const turns = joinTurns(segments.map((s) => s.turns));
   const frames = segments.flatMap((s) => s.frames).sort(byTime);
   const snaps = segments.flatMap((s) => s.snaps).sort(byTime);
-  const notes = await compose({ turns: link(turns, frames, snaps), snaps, course, context, keywords });
-  return { notes, snaps, markdown: toMarkdown(notes, snaps) };
+  const { notes, usage } = await compose({ turns: link(turns, frames, snaps), snaps, course, keywords });
+  return { notes, snaps, markdown: toMarkdown(notes, snaps), usage };
 }

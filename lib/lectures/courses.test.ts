@@ -74,6 +74,17 @@ test("a syllabus fills the course's meeting times and keywords, written as the s
   expect(JSON.stringify(h.create.mock.calls[0][0])).toContain("Lectures Tuesdays 10:00");
 });
 
+test("a syllabus run records its tokens, so admin Spend counts Front Row", async () => {
+  const RUN = "a0000000-0000-4000-8000-0000000000aa";
+  const { db } = fakeDb(seed());
+  const { db: admin, tables } = fakeDb({ ...seed(), runs: [{ id: RUN, user_id: ME, kind: "syllabus", status: "running" }] });
+  (db as { rpc: unknown }).rpc = async () => ({ data: RUN, error: null });
+  h.admin = admin;
+  h.create.mockResolvedValue({ output_text: JSON.stringify({ meets: [], keywords: [] }), usage: { input_tokens: 900, output_tokens: 60 } });
+  await readSyllabus(db, ME, ECO, file("ECO220 syllabus", "syllabus.txt"));
+  expect(tables.runs[0]).toMatchObject({ status: "done", usage: { "muse-spark-1.3": { in: 900, out: 60 } }, tokens: 960 });
+});
+
 test("a syllabus for another student's course is 404 and reads nothing", async () => {
   const { db, tables } = fakeDb(seed());
   expect((await readSyllabus(db, ME, THEIRS, file("x", "s.txt"))).code).toBe(404);
