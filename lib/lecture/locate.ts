@@ -14,6 +14,10 @@ export function parseSam(text: string): Box[] {
   );
 }
 
+/** Horizontal distance from a person to a board; 0 when they overlap. */
+const gap = (p: Box, board: Box) => Math.max(0, board.x1 - p.x2, p.x1 - board.x2);
+const area = (b: Box) => (b.x2 - b.x1) * (b.y2 - b.y1);
+
 /** The person standing at the board: vertical centre inside the board's span, horizontally closest to it. Students sit below. */
 export function pickProfessor(people: Box[], board: Box): Box | null {
   let best: Box | null = null;
@@ -21,10 +25,21 @@ export function pickProfessor(people: Box[], board: Box): Box | null {
   for (const p of people) {
     const cy = (p.y1 + p.y2) / 2;
     if (cy < board.y1 || cy > board.y2) continue;
-    const gap = Math.max(0, board.x1 - p.x2, p.x1 - board.x2);
-    if (gap < bestGap) [best, bestGap] = [p, gap];
+    const g = gap(p, board);
+    if (g < bestGap) [best, bestGap] = [p, g];
   }
   return best;
+}
+
+/** The board the professor is nearest to, larger on a tie; with nobody at any board, the largest. */
+export function pickBoard(boards: Box[], people: Box[]): { board: Box; person: Box | null } | null {
+  let best: { board: Box; person: Box | null; g: number } | null = null;
+  for (const board of boards) {
+    const person = pickProfessor(people, board);
+    const g = person ? gap(person, board) : Infinity;
+    if (!best || g < best.g || (g === best.g && area(board) > area(best.board))) best = { board, person, g };
+  }
+  return best && { board: best.board, person: best.person };
 }
 
 async function sam(text: string, frameUrl: string): Promise<Box[]> {
@@ -47,8 +62,5 @@ async function sam(text: string, frameUrl: string): Promise<Box[]> {
 
 export async function locate(frameUrl: string): Promise<{ board: Box | null; person: Box | null }> {
   const [people, ...found] = await Promise.all([sam("person", frameUrl), ...BOARDS.map((b) => sam(b, frameUrl))]);
-  const boards = found.flat();
-  const area = (b: Box) => (b.x2 - b.x1) * (b.y2 - b.y1);
-  const board = boards.reduce<Box | null>((a, b) => (a && area(a) >= area(b) ? a : b), null);
-  return { board, person: board && pickProfessor(people, board) };
+  return pickBoard(found.flat(), people) ?? { board: null, person: null };
 }

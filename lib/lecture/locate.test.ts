@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { meta } from "./meta";
-import { locate, parseSam, pickProfessor } from "./locate";
+import { locate, parseSam, pickBoard, pickProfessor } from "./locate";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "fixtures", name), "utf8");
 
@@ -41,6 +41,31 @@ describe("pickProfessor", () => {
   it("pickProfessor returns null when nobody stands at the board", () => {
     const board = { x1: 0, y1: 0, x2: 100, y2: 100, w: 500, h: 500 };
     expect(pickProfessor([{ x1: 0, y1: 300, x2: 50, y2: 500, w: 500, h: 500 }], board)).toBeNull();
+  });
+});
+
+describe("pickBoard", () => {
+  const box = (x1: number, y1: number, x2: number, y2: number) => ({ x1, y1, x2, y2, w: 1280, h: 720 });
+  const big = box(0, 50, 700, 650);
+  const small = box(750, 100, 1250, 500);
+
+  it("pickBoard picks the board the professor stands at over a larger blank one", () => {
+    const prof = box(900, 150, 1000, 600); // inside the small board (gap 0); 200 px from the big one
+    expect(pickBoard([big, small], [prof])).toEqual({ board: small, person: prof });
+  });
+
+  it("pickBoard falls back to the largest board when no person is at any board", () => {
+    const student = box(100, 650, 200, 720); // centre y 685, below both boards
+    expect(pickBoard([small, big], [student])).toEqual({ board: big, person: null });
+  });
+
+  it("pickBoard returns null for no boards", () => {
+    expect(pickBoard([], [box(0, 0, 10, 10)])).toBeNull();
+  });
+
+  it("pickBoard prefers the larger board when the professor is equally near two", () => {
+    const prof = box(710, 150, 740, 450); // 10 px from each board
+    expect(pickBoard([small, big], [prof])).toEqual({ board: big, person: prof });
   });
 });
 
