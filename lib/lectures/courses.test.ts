@@ -74,12 +74,12 @@ test("a syllabus fills the course's meeting times and keywords, written as the s
   expect(JSON.stringify(h.create.mock.calls[0][0])).toContain("Lectures Tuesdays 10:00");
 });
 
-test("a syllabus read gets 180 s and one retry, not the 45 s client default", async () => {
+test("a syllabus read gets 100 s and no retry, inside the 120 s route", async () => {
   const { db } = fakeDb(seed());
   h.admin = fakeDb(seed()).db;
   h.create.mockResolvedValue({ output_text: JSON.stringify({ meets: [], keywords: [] }) });
   await readSyllabus(db, ME, ECO, file("ECO220 syllabus", "syllabus.txt"));
-  expect(h.create.mock.calls[0][1]).toEqual({ timeout: 180_000, maxRetries: 1 });
+  expect(h.create.mock.calls[0][1]).toEqual({ timeout: 100_000, maxRetries: 0 });
 });
 
 test("a syllabus run records its tokens, so admin Spend counts Front Row", async () => {

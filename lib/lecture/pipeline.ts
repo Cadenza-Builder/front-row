@@ -15,19 +15,21 @@ export async function processSegment(input: {
 }): Promise<Segment> {
   // The model fetches these URLs; only signed https or inline images.
   for (const f of input.frames) if (!/^(https:|data:image\/)/.test(f.url)) throw new Error(`frame ${f.t}: url must be https or data:image`);
-  const turns = await transcribe(input.wav, { keywords: input.keywords, offset: input.offset });
   // One bad frame never fails the lecture: a failed locate is no board, a failed board read is no snapshot.
   const none = { board: null, person: null, kind: null };
-  const find = (f: { t: number; url: string }, kind?: BoardKind) => (kind ? locate(f.url, kind) : locate(f.url)).catch((e) => warn(f.t, "locate", e, none));
+  const find = (f: { t: number; url: string }, kind?: BoardKind) => locate(f.url, kind).catch((e) => warn(f.t, "locate", e, none));
   const picked = framesToLocate(input.frames);
   const [first, ...rest] = input.frames.filter((f) => picked.has(f.t));
   const found = new Map<number, Awaited<ReturnType<typeof find>>>();
-  if (first) {
+  const locateAll = async () => {
+    if (!first) return;
     const head = await find(first);
     found.set(first.t, head);
     const kind = head.kind ?? undefined;
     (await Promise.all(rest.map((f) => find(f, kind)))).forEach((r, i) => found.set(rest[i].t, r));
-  }
+  };
+  // In parallel so a segment fits the 300 s function: max(transcribe 90 s, locate 135 s) + reads 45 s. A failed transcript still fails the segment.
+  const [turns] = await Promise.all([transcribe(input.wav, { keywords: input.keywords, offset: input.offset }), locateAll()]);
   // A frame not located keeps the boxes of the last located frame before it.
   let last: Awaited<ReturnType<typeof find>> = none;
   const frames: Frame[] = input.frames.map((f) => {

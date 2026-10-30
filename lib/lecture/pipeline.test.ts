@@ -48,6 +48,18 @@ describe("processSegment", () => {
     expect(out.frames[2].board).toBeNull();
   });
 
+  it("processSegment starts locating before the transcript is back", async () => {
+    vi.mocked(locate).mockResolvedValue({ board: null, person: null, kind: null });
+    vi.mocked(transcribe).mockImplementation(() => vi.waitFor(() => { if (!vi.mocked(locate).mock.calls.length) throw new Error("not yet"); return [] }, { timeout: 200 }));
+    await expect(processSegment({ wav, offset: 0, frames: [frame(0)], keywords: [] })).resolves.toMatchObject({ turns: [] });
+  });
+
+  it("processSegment fails when the transcript fails", async () => {
+    vi.mocked(locate).mockResolvedValue({ board: null, person: null, kind: null });
+    vi.mocked(transcribe).mockRejectedValue(new Error("whisper down"));
+    await expect(processSegment({ wav, offset: 0, frames: [frame(0)], keywords: [] })).rejects.toThrow("whisper down");
+  });
+
   it("processSegment refuses a frame url that is not https or data:", async () => {
     await expect(processSegment({ wav, offset: 0, frames: [{ t: 0, url: "file:///etc/passwd", changed: true }], keywords: [] })).rejects.toThrow();
     expect(locate).not.toHaveBeenCalled();
@@ -93,7 +105,7 @@ describe("processSegment locates only some frames", () => {
     vi.mocked(locate).mockResolvedValue({ board, person: null, kind: "blackboard" });
     await processSegment({ wav, offset: 120, frames, keywords: [] });
     const calls = vi.mocked(locate).mock.calls;
-    expect(calls[0]).toEqual([frame(0).url]);
+    expect(calls[0]).toEqual([frame(0).url, undefined]);
     expect(calls.slice(1)).toEqual([30, 90, 150].map((t) => [frame(t).url, "blackboard"]));
   });
 
