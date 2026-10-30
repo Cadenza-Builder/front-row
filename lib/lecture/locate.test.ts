@@ -98,11 +98,47 @@ describe("locate", () => {
     expect(await locate("https://x/f.jpg")).toEqual({
       board: { x1: 8, y1: 53, x2: 946, y2: 461, w: 960, h: 720 },
       person: { x1: 358, y1: 140, x2: 647, y2: 719, w: 960, h: 720 },
+      kind: "blackboard",
     });
   });
 
   it("locate returns nulls when SAM finds nothing", async () => {
     vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: "" } as never);
-    expect(await locate("https://x/f.jpg")).toEqual({ board: null, person: null });
+    expect(await locate("https://x/f.jpg")).toEqual({ board: null, person: null, kind: null });
+  });
+
+  // SAM answers by phrase; counts which phrases were asked.
+  const samAnswers = (outputs: Record<string, string>) => {
+    const asked: string[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
+      const text = body.input[0].content[0].text;
+      asked.push(text);
+      return { output_text: outputs[text] ?? "" };
+    }) as never);
+    return asked;
+  };
+
+  it("locate with a kind asks person and that kind only", async () => {
+    const asked = samAnswers({ whiteboard: fixture("sam-board.txt"), person: fixture("sam-person.txt") });
+    const out = await locate("https://x/f.jpg", "whiteboard");
+    expect(asked.sort()).toEqual(["person", "whiteboard"]);
+    expect(out.board).toMatchObject({ x1: 0, y1: 70, x2: 1010, y2: 576 });
+    expect(out.kind).toBe("whiteboard");
+  });
+
+  it("locate with a kind that finds nothing asks the other two", async () => {
+    const asked = samAnswers({ blackboard: fixture("sam-board.txt"), person: fixture("sam-person.txt") });
+    const out = await locate("https://x/f.jpg", "whiteboard");
+    expect(asked.sort()).toEqual(["blackboard", "person", "projector screen", "whiteboard"]);
+    expect(out.kind).toBe("blackboard");
+  });
+
+  it("locate without a kind asks all four and reports the winning kind", async () => {
+    const asked = samAnswers({ "projector screen": fixture("sam-board.txt"), person: fixture("sam-person.txt") });
+    const out = await locate("https://x/f.jpg");
+    expect(asked.sort()).toEqual(["blackboard", "person", "projector screen", "whiteboard"]);
+    expect(out.kind).toBe("projector screen");
+    expect(out.person).toMatchObject({ x1: 658, y1: 241, x2: 973, y2: 675 });
   });
 });

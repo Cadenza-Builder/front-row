@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Box } from "./locate";
 import type { Snapshot } from "./board";
-import { finishLecture, processSegment } from "./pipeline";
+import { finishLecture, framesToLocate, processSegment } from "./pipeline";
 
 vi.mock("./transcribe", async (orig) => ({ ...(await orig<typeof import("./transcribe")>()), transcribe: vi.fn() }));
 vi.mock("./locate", () => ({ locate: vi.fn() }));
@@ -25,7 +25,7 @@ beforeEach(() => {
 
 describe("processSegment", () => {
   it("processSegment with no board anywhere returns snaps []", async () => {
-    vi.mocked(locate).mockResolvedValue({ board: null, person: null });
+    vi.mocked(locate).mockResolvedValue({ board: null, person: null, kind: null });
     const out = await processSegment({ wav, offset: 0, frames: [frame(0), frame(10)], keywords: [] });
     expect(out.snaps).toEqual([]);
     expect(out.frames.map((f) => f.board)).toEqual([null, null]);
@@ -35,8 +35,8 @@ describe("processSegment", () => {
 
   it("processSegment skips a snapshot whose board read fails, and a frame whose locate fails", async () => {
     vi.mocked(locate)
-      .mockResolvedValueOnce({ board, person: null })
-      .mockResolvedValueOnce({ board, person: null })
+      .mockResolvedValueOnce({ board, person: null, kind: "blackboard" })
+      .mockResolvedValueOnce({ board, person: null, kind: "blackboard" })
       .mockRejectedValueOnce(new Error("sam down"));
     vi.mocked(readBoard)
       .mockRejectedValueOnce(new Error("alt over 200"))
@@ -56,11 +56,52 @@ describe("processSegment", () => {
 
 describe("processSegment later segments", () => {
   it("processSegment after the first segment reads no board when nothing changed", async () => {
-    vi.mocked(locate).mockResolvedValue({ board, person: null });
+    vi.mocked(locate).mockResolvedValue({ board, person: null, kind: "blackboard" });
     const still = (t: number) => ({ ...frame(t), changed: false });
     const out = await processSegment({ wav, offset: 120, frames: [still(120), still(130)], keywords: [] });
     expect(out.snaps).toEqual([]);
     expect(readBoard).not.toHaveBeenCalled();
+  });
+});
+
+describe("framesToLocate", () => {
+  it("framesToLocate picks changed frames, the first frame, and one every 60 s", () => {
+    const frames = Array.from({ length: 18 }, (_, i) => ({ t: i * 10, changed: i * 10 === 30 }));
+    expect(framesToLocate(frames)).toEqual(new Set([0, 30, 90, 150]));
+  });
+});
+
+describe("processSegment locates only some frames", () => {
+  const frames = Array.from({ length: 18 }, (_, i) => ({ ...frame(i * 10), changed: i * 10 === 30 }));
+  beforeEach(() => {
+    vi.mocked(readBoard).mockImplementation(async (f) => ({ t: f.t, url: f.url, board: f.board, markdown: "", alt: "" }));
+  });
+
+  it("processSegment copies the last located boxes onto frames not located", async () => {
+    vi.mocked(locate).mockImplementation(async (url) => ({ board: { ...board, x1: Number(url.split(",")[1]) }, person: null, kind: "blackboard" }));
+    const out = await processSegment({ wav, offset: 120, frames, keywords: [] });
+    expect(vi.mocked(locate).mock.calls.map(([url]) => url)).toEqual([0, 30, 90, 150].map((t) => frame(t).url));
+    const at = (t: number) => out.frames.find((f) => f.t === t)!;
+    expect(at(40).board).toEqual(at(30).board);
+    expect(at(40).person).toEqual(at(30).person);
+    expect(at(40).board!.x1).toBe(30);
+    expect(at(170).board!.x1).toBe(150);
+    expect(at(40)).not.toHaveProperty("kind"); // frames are saved; the kind is only for locating
+  });
+
+  it("processSegment locates the first frame with all kinds, the rest with its kind", async () => {
+    vi.mocked(locate).mockResolvedValue({ board, person: null, kind: "blackboard" });
+    await processSegment({ wav, offset: 120, frames, keywords: [] });
+    const calls = vi.mocked(locate).mock.calls;
+    expect(calls[0]).toEqual([frame(0).url]);
+    expect(calls.slice(1)).toEqual([30, 90, 150].map((t) => [frame(t).url, "blackboard"]));
+  });
+
+  it("processSegment with no board anywhere still locates the first frame with all kinds", async () => {
+    vi.mocked(locate).mockResolvedValue({ board: null, person: null, kind: null });
+    const out = await processSegment({ wav, offset: 120, frames, keywords: [] });
+    expect(vi.mocked(locate).mock.calls.map((c) => c[1])).toEqual([undefined, undefined, undefined, undefined]);
+    expect(out.frames.every((f) => f.board === null)).toBe(true);
   });
 });
 

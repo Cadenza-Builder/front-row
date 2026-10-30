@@ -5,7 +5,8 @@ import { meta } from "./meta";
 export type Box = { x1: number; y1: number; x2: number; y2: number; w: number; h: number };
 
 // SAM 3.1 takes one noun phrase: the combined list found nothing on a real chalkboard (2026-10-28), so each is asked.
-const BOARDS = ["blackboard", "whiteboard", "projector screen"];
+export type BoardKind = "blackboard" | "whiteboard" | "projector screen";
+const BOARDS: BoardKind[] = ["blackboard", "whiteboard", "projector screen"];
 
 /** Every `<|box;...|>` in a SAM output stream; masks ignored. */
 export function parseSam(text: string): Box[] {
@@ -60,7 +61,12 @@ async function sam(text: string, frameUrl: string): Promise<Box[]> {
   return parseSam(res.output_text ?? "");
 }
 
-export async function locate(frameUrl: string): Promise<{ board: Box | null; person: Box | null }> {
-  const [people, ...found] = await Promise.all([sam("person", frameUrl), ...BOARDS.map((b) => sam(b, frameUrl))]);
-  return pickBoard(found.flat(), people) ?? { board: null, person: null };
+/** With `kind` (the phrase that matched earlier), asks only person and that phrase; the other two only if it finds nothing. */
+export async function locate(frameUrl: string, kind?: BoardKind): Promise<{ board: Box | null; person: Box | null; kind: BoardKind | null }> {
+  const kindOf = new Map<Box, BoardKind>();
+  const ask = (kinds: BoardKind[]) => Promise.all(kinds.map(async (k) => (await sam(k, frameUrl)).forEach((b) => kindOf.set(b, k))));
+  const [people] = await Promise.all([sam("person", frameUrl), ask(kind ? [kind] : BOARDS)]);
+  if (kind && !kindOf.size) await ask(BOARDS.filter((b) => b !== kind));
+  const pick = pickBoard([...kindOf.keys()], people);
+  return pick ? { ...pick, kind: kindOf.get(pick.board)! } : { board: null, person: null, kind: null };
 }
