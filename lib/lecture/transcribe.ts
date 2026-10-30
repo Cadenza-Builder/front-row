@@ -9,17 +9,28 @@ export async function transcribe(
   wav: Blob,
   opts: { keywords: string[]; offset: number; fetchImpl?: typeof fetch },
 ): Promise<Turn[]> {
-  const form = new FormData();
   // Meta refuses the whole request over one keyword longer than 30 characters; compose still gets every keyword.
   const keywords = opts.keywords.filter((k) => k.length <= 30);
   const request = { model: "muse-voice-transcribe-1.0", audioEncoding: "WAV", mode: "DIARIZATION", keywords };
-  form.append("request", new Blob([JSON.stringify(request)], { type: "application/json" }));
-  form.append("audio", wav, "audio.wav");
-  const res = await (opts.fetchImpl ?? fetch)("https://api.meta.ai/v1/asr/transcribe", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${metaKey()}`, Accept: "application/json" },
-    body: form,
-  });
+  let res: Response | undefined;
+  // One retry on a network error, timeout or 5xx; a 4xx is our fault and fails at once.
+  for (let attempt = 1; ; attempt++) {
+    const form = new FormData(); // a sent body can't be reused
+    form.append("request", new Blob([JSON.stringify(request)], { type: "application/json" }));
+    form.append("audio", wav, "audio.wav");
+    try {
+      res = await (opts.fetchImpl ?? fetch)("https://api.meta.ai/v1/asr/transcribe", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${metaKey()}`, Accept: "application/json" },
+        body: form,
+        signal: AbortSignal.timeout(45_000),
+      });
+    } catch (e) {
+      if (attempt === 2) throw e;
+      continue;
+    }
+    if (res.status < 500 || attempt === 2) break;
+  }
   if (!res.ok) throw new Error(`transcribe failed: ${res.status} ${await res.text()}`);
   const body = (await res.json()) as { transcript?: string; turns?: AsrTurn[] };
   // Silence comes back with an empty transcript and no turns.

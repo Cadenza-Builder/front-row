@@ -1,4 +1,4 @@
-import { pickSnapshots, readBoard, type Frame, type Snapshot } from "./board";
+import { dedupeSnaps, pickSnapshots, readBoard, type Frame, type Snapshot } from "./board";
 import { compose, toMarkdown } from "./compose";
 import { link } from "./link";
 import { locate, type BoardKind } from "./locate";
@@ -51,12 +51,12 @@ function warn<T>(t: number, step: string, e: unknown, fallback: T): T {
   return fallback;
 }
 
-/** All segments of a lecture into notes. `link` needs time order, so frames and snapshots are sorted. */
+/** All segments of a lecture into notes. `link` needs time order, so frames and snapshots are sorted; repeated board reads are dropped first. */
 export async function finishLecture(segments: Segment[], course: string, keywords: string[]) {
   const byTime = (a: { t: number }, b: { t: number }) => a.t - b.t;
   const turns = joinTurns(segments.map((s) => s.turns));
   const frames = segments.flatMap((s) => s.frames).sort(byTime);
-  const snaps = segments.flatMap((s) => s.snaps).sort(byTime);
+  const snaps = dedupeSnaps(segments.flatMap((s) => s.snaps).sort(byTime));
   const { notes, usage } = await compose({ turns: link(turns, frames, snaps), snaps, course, keywords });
   return { notes, snaps, markdown: toMarkdown(notes), usage };
 }

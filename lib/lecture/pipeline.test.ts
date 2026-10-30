@@ -106,8 +106,15 @@ describe("processSegment locates only some frames", () => {
 });
 
 describe("finishLecture", () => {
+  const A = "Kirchhoff's voltage law: $\\sum V = 0$ around any closed loop, so $V_R + V_L + V_C = V$";
+  const B = "$$\\hat\\beta = (X^TX)^{-1}X^Ty,\\; \\operatorname{Var}(\\hat\\beta) = \\sigma^2(X^TX)^{-1}$$";
+  // Distinct text per time by default, so dedupeSnaps keeps them all.
+  const snap = (t: number, markdown = t === 10 ? A : `${B} board ${t}`): Snapshot => ({ t, url: "", board, markdown, alt: "" });
+  const notes = { title: "T", summary: "S", sections: [], words: [] };
+
+  beforeEach(() => vi.mocked(compose).mockReset().mockResolvedValue({ notes, usage: { "muse-spark-1.3": { in: 0, out: 0 } } }));
+
   it("finishLecture joins turns across segments", async () => {
-    const snap = (t: number): Snapshot => ({ t, url: "", board, markdown: `board ${t}`, alt: "" });
     vi.mocked(compose).mockResolvedValue({ notes: { title: "T", summary: "S", sections: [{ heading: "H", body: "B", snaps: [0, 1], exam: [] }], words: [] }, usage: { "muse-spark-1.3": { in: 1, out: 2 } } });
     const segments = [
       { turns: [{ start: 0, end: 60, text: "a" }, { start: 60, end: 121, text: "b" }], frames: [], snaps: [snap(10)] },
@@ -121,5 +128,25 @@ describe("finishLecture", () => {
     expect(out.snaps.map((s) => s.t)).toEqual([10, 130]);
     expect(out.markdown).not.toContain("board 130");
     expect(out.usage).toEqual({ "muse-spark-1.3": { in: 1, out: 2 } });
+  });
+
+  it("finishLecture composes and returns deduped snaps", async () => {
+    const segments = [
+      { turns: [{ start: 0, end: 60, text: "a" }], frames: [], snaps: [snap(10, A)] },
+      { turns: [{ start: 125, end: 150, text: "c" }], frames: [], snaps: [snap(130, A)] },
+    ];
+    const out = await finishLecture(segments, "PHY131", []);
+    expect(vi.mocked(compose).mock.calls[0][0].snaps).toHaveLength(1);
+    expect(out.snaps.map((s) => s.t)).toEqual([10]);
+  });
+
+  it("finishLecture links speech between a replaced photo and its replacement to the previous kept photo", async () => {
+    const fuller = A + "\n$$L\\frac{d^2Q}{dt^2}+R\\frac{dQ}{dt}+\\frac1C Q=V$$";
+    const segments = [{ turns: [{ start: 15, end: 20, text: "this one" }], frames: [], snaps: [snap(5, B), snap(10, A), snap(30, fuller)] }];
+    await finishLecture(segments, "PHY131", []);
+    const sent = vi.mocked(compose).mock.calls[0][0];
+    expect(sent.snaps.map((s) => s.t)).toEqual([5, 30]);
+    // Known limit (spec D): A@10 was replaced by A+@30, so speech at 15 links back to B.
+    expect(sent.turns[0].snap).toBe(0);
   });
 });

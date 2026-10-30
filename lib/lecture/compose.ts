@@ -85,7 +85,8 @@ const PROMPT =
   "An example's `check` is a one-line check of the answer (e.g. substituting it back), only when the example has a natural check, else null. " +
   "Most sections have no boxes: leave `boxes` empty. " +
   "In `together`, write a short closing synthesis of how the lecture's ideas connect. " +
-  "Write all math as LaTeX in $...$. In `words`, define the course terms used.";
+  "Write all math as LaTeX in $...$. In `words`, define the course terms used. " +
+  "Never write a placeholder, empty or meta section (e.g. about omitted snapshots).";
 
 const s = (t: number) => `${Math.round(t)}s`;
 
@@ -109,10 +110,13 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
         schema: z.toJSONSchema(Wire, { target: "draft-7" }) as Record<string, unknown>,
       },
     },
-  });
+  }, { timeout: 180_000, maxRetries: 0 });
   const notes = Notes.parse(JSON.parse(res.output_text));
   // An invented snapshot index is dropped, never fatal: a lecture with no board must still get notes.
   for (const sec of notes.sections) sec.snaps = sec.snaps.filter((i) => Number.isInteger(i) && i >= 0 && i < input.snaps.length);
+  // A short section with no snapshot, box or exam line is a placeholder ("Empty snapshots omitted."); keep one if all are.
+  const real = notes.sections.filter((sec) => sec.snaps.length || sec.boxes?.length || sec.exam.length || sec.body.trim().length >= 80);
+  notes.sections = real.length || !notes.sections.length ? real : [notes.sections.reduce((a, b) => (b.body.trim().length > a.body.trim().length ? b : a))];
   if (!notes.together?.trim()) delete notes.together;
   return { notes, usage: { "muse-spark-1.3": { in: res.usage?.input_tokens ?? 0, out: res.usage?.output_tokens ?? 0 } } };
 }
