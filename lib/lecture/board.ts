@@ -1,4 +1,5 @@
 import type { ResponseInputImage } from "openai/resources/responses/responses";
+import sharp from "sharp";
 import { z } from "zod";
 import type { Box } from "./locate";
 import { meta } from "./meta";
@@ -10,13 +11,39 @@ export type Snapshot = { t: number; url: string; board: Box; markdown: string; a
 
 export const BoardReading = z.object({ markdown: z.string(), alt: z.string().max(200) });
 
-const PROMPT = (b: Box, said: string) =>
-  `The lecture board is the region x1=${b.x1};y1=${b.y1};x2=${b.x2};y2=${b.y2} (pixels) of this frame. ` +
-  "Transcribe everything written on it as Markdown, in reading order. Write all math as LaTeX in $...$ " +
+const PROMPT = (said: string) =>
+  "This image is a lecture board. Transcribe everything written on it as Markdown, in reading order. Write all math as LaTeX in $...$ " +
   "(inline) or $$...$$ (display). Ignore the people and anything outside the board. " +
   "The handwriting may be rushed: use what the professor said around this moment (below) to settle unclear symbols and words. " +
   "Write [unreadable] for anything you still cannot read; never guess. " +
   `In alt, describe the board for a screen reader in under 200 characters.\n\nSaid around this moment:\n${said || "(no speech)"}`;
+
+/** `box` (in `box.w × box.h` pixels) scaled onto a `width × height` image, padded by `margin` of its size, clamped to the image. */
+export function cropRect(box: Box, width: number, height: number, margin = 0.05) {
+  const sx = width / box.w;
+  const sy = height / box.h;
+  const padX = (box.x2 - box.x1) * sx * margin;
+  const padY = (box.y2 - box.y1) * sy * margin;
+  const left = Math.max(0, Math.round(box.x1 * sx - padX));
+  const top = Math.max(0, Math.round(box.y1 * sy - padY));
+  const right = Math.min(width, Math.round(box.x2 * sx + padX));
+  const bottom = Math.min(height, Math.round(box.y2 * sy + padY));
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/** The frame cropped to its board, as a data: URL. Throws on a failed fetch or crop, so the caller skips the frame. */
+async function cropBoard(url: string, box: Box): Promise<string> {
+  let buf: Buffer;
+  if (url.startsWith("data:")) buf = Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+  else {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`frame fetch ${res.status}`);
+    buf = Buffer.from(await res.arrayBuffer());
+  }
+  const { width, height } = await sharp(buf).metadata();
+  const jpeg = await sharp(buf).extract(cropRect(box, width, height)).jpeg({ quality: 85 }).toBuffer();
+  return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+}
 
 /** `turns` are the segment's; only those within NEAR seconds of the frame go to the model. */
 const NEAR = 30;
@@ -26,6 +53,7 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
     .filter((t) => t.end >= frame.t - NEAR && t.start <= frame.t + NEAR)
     .map((t) => t.text)
     .join("\n");
+  const image = await cropBoard(frame.url, frame.board);
   const res = await meta().responses.create({
     model: "muse-spark-1.3",
     input: [
@@ -33,9 +61,9 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
         type: "message",
         role: "user",
         content: [
-          { type: "input_text", text: PROMPT(frame.board, said) },
+          { type: "input_text", text: PROMPT(said) },
           // SDK types demand `detail`; the request verified live sent none.
-          { type: "input_image", image_url: frame.url } as ResponseInputImage,
+          { type: "input_image", image_url: image } as ResponseInputImage,
         ],
       },
     ],
