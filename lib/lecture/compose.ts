@@ -110,7 +110,7 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
         schema: z.toJSONSchema(Wire, { target: "draft-7" }) as Record<string, unknown>,
       },
     },
-  });
+  }, { timeout: 180_000, maxRetries: 0 });
   const notes = Notes.parse(JSON.parse(res.output_text));
   // An invented snapshot index is dropped, never fatal: a lecture with no board must still get notes.
   for (const sec of notes.sections) sec.snaps = sec.snaps.filter((i) => Number.isInteger(i) && i >= 0 && i < input.snaps.length);

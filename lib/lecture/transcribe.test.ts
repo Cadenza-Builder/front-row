@@ -63,6 +63,38 @@ describe("transcribe", () => {
       transcribe(wav, { keywords: [], offset: 0, fetchImpl: async () => new Response("bad", { status: 400 }) }),
     ).rejects.toThrow(/400/);
   });
+
+  it("transcribe passes a timeout signal", async () => {
+    let signal: unknown;
+    const fetchImpl = vi.fn(async (_: string | URL | Request, init?: RequestInit) => {
+      signal = init?.signal;
+      return json({ transcript: "" });
+    });
+    await transcribe(wav, { keywords: [], offset: 0, fetchImpl });
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("transcribe retries once on a network error or 5xx", async () => {
+    const ok = () => json({ transcript: "hi", turns: [{ startMs: 0, endMs: 1000, transcript: "hi" }] });
+    for (const first of [() => Promise.reject(new Error("socket hang up")), async () => new Response("down", { status: 503 })]) {
+      const fetchImpl = vi.fn().mockImplementationOnce(first).mockImplementationOnce(async () => ok());
+      const turns = await transcribe(wav, { keywords: [], offset: 0, fetchImpl });
+      expect(turns).toEqual([{ start: 0, end: 1, text: "hi" }]);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it("transcribe does not retry a 4xx", async () => {
+    const fetchImpl = vi.fn(async () => new Response("bad", { status: 400 }));
+    await expect(transcribe(wav, { keywords: [], offset: 0, fetchImpl })).rejects.toThrow(/400/);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("transcribe gives up after the retry", async () => {
+    const fetchImpl = vi.fn(async () => new Response("down", { status: 503 }));
+    await expect(transcribe(wav, { keywords: [], offset: 0, fetchImpl })).rejects.toThrow(/503/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("meta", () => {

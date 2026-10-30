@@ -218,15 +218,10 @@ describe("compose", () => {
     expect(out.sections.map((s) => s.heading)).toEqual(["B"]);
   });
 
-  it("compose tells the model never to write a placeholder section", async () => {
-    let prompt = "";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
-      prompt = body.input[0].content[0].text;
-      return { output_text: JSON.stringify(notes([])) };
-    }) as never);
+  it("compose gives the model 180 s and no retry", async () => {
+    const create = vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([])) } as never);
     await compose({ turns: [], snaps: [], course: "ECO220", keywords: [] });
-    expect(prompt).toContain("Never write a placeholder, empty or meta section (e.g. about omitted snapshots).");
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 180_000, maxRetries: 0 });
   });
 
   it("compose keeps a written together", async () => {
