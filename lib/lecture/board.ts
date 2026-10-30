@@ -54,10 +54,14 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
   return { t: frame.t, url: frame.url, board: frame.board, markdown, alt };
 }
 
-/** Frames worth reading: every board frame that changed, plus the first one with a board when `keepFirst` (the lecture's first segment). */
+/**
+ * Frames worth reading: a board frame that changed once the writing has settled (the next frame, board or not, is unchanged,
+ * or there is none), plus the first one with a board when `keepFirst` (the lecture's first segment).
+ */
 export function pickSnapshots(frames: Frame[], keepFirst = true): (Frame & { board: Box })[] {
+  const settled = new Set(frames.filter((f, i) => f.changed && (i === frames.length - 1 || !frames[i + 1].changed)));
   const withBoard = frames.filter((f): f is Frame & { board: Box } => f.board !== null);
-  return withBoard.filter((f, i) => (keepFirst && i === 0) || f.changed);
+  return withBoard.filter((f, i) => (keepFirst && i === 0) || settled.has(f));
 }
 
 /** The 6-character pieces of a read, ignoring `[unreadable]`, whitespace and case. */

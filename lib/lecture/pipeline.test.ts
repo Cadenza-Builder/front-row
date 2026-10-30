@@ -41,7 +41,8 @@ describe("processSegment", () => {
     vi.mocked(readBoard)
       .mockRejectedValueOnce(new Error("alt over 200"))
       .mockImplementationOnce(async (f) => ({ t: f.t, url: f.url, board: f.board, markdown: "$x$", alt: "x" }));
-    const out = await processSegment({ wav, offset: 0, frames: [frame(0), frame(10), frame(20)], keywords: [] });
+    // Frame 20 is unchanged, so frame 10's writing has settled and it is read.
+    const out = await processSegment({ wav, offset: 0, frames: [frame(0), frame(10), { ...frame(20), changed: false }], keywords: [] });
     expect(out.snaps.map((s) => s.t)).toEqual([10]);
     // Board reads get the segment's transcript to settle unclear symbols.
     expect(vi.mocked(readBoard).mock.calls[0][1]).toEqual([{ start: 1, end: 2, text: "hi" }]);

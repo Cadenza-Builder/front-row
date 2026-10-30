@@ -12,16 +12,32 @@ beforeEach(() => {
 });
 
 describe("pickSnapshots", () => {
-  it("pickSnapshots keeps the first board frame and changed ones, skips boardless", () => {
+  it("pickSnapshots keeps the first board frame and settled changed ones, skips boardless", () => {
     const frames = [
       frame(0, null, true), // boardless, even though changed
       frame(5, board, false), // first board frame, kept though unchanged
       frame(10, board, false),
-      frame(15, board, true),
+      frame(15, board, true), // next frame also changed: still being written, not read
       frame(20, null, true),
       frame(25, board, true),
     ];
-    expect(pickSnapshots(frames).map((f) => f.t)).toEqual([5, 15, 25]);
+    expect(pickSnapshots(frames).map((f) => f.t)).toEqual([5, 25]);
+  });
+
+  it("pickSnapshots reads a changed frame only once the next frame is unchanged", () => {
+    const frames = [true, true, true, false, true, false].map((c, i) => frame(i * 10, board, c));
+    expect(pickSnapshots(frames, false).map((f) => f.t)).toEqual([20, 40]);
+    expect(pickSnapshots(frames, true).map((f) => f.t)).toEqual([0, 20, 40]);
+  });
+
+  it("pickSnapshots reads a changed frame that ends the segment", () => {
+    expect(pickSnapshots([frame(0, board, false), frame(10, board, true)], false).map((f) => f.t)).toEqual([10]);
+  });
+
+  it("pickSnapshots skips frames without a board when looking at the next frame", () => {
+    // The next frame is the next in the list, board or not.
+    const frames = [frame(0, board, true), frame(10, null, false), frame(20, board, true), frame(30, null, true), frame(40, board, false)];
+    expect(pickSnapshots(frames, false).map((f) => f.t)).toEqual([0]);
   });
 
   it("pickSnapshots does not repeat a first board frame that also changed", () => {
