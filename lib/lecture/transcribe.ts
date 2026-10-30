@@ -30,6 +30,7 @@ export async function transcribe(
       continue;
     }
     if (res.status < 500 || attempt === 2) break;
+    await res.body?.cancel(); // free the socket before retrying
   }
   if (!res.ok) throw new Error(`transcribe failed: ${res.status} ${await res.text()}`);
   const body = (await res.json()) as { transcript?: string; turns?: AsrTurn[] };
