@@ -50,6 +50,7 @@ describe("readBoard", () => {
     }) as never);
     const snap = await readBoard(frame(5, board, true) as Frame & { board: Box }, []);
     expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0][1]).toEqual({ maxRetries: 1 });
     expect(snap).toEqual({ t: 5, url: "f5.jpg", board, markdown: "$E = mc^2$", alt: "Einstein's equation" });
   });
 

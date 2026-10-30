@@ -48,7 +48,8 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
         schema: z.toJSONSchema(BoardReading.extend({ alt: z.string() }), { target: "draft-7" }) as Record<string, unknown>,
       },
     },
-  });
+    // One retry, because single 45 s stalls lost reads on the live run.
+  }, { maxRetries: 1 });
   const { markdown, alt } = BoardReading.parse(JSON.parse(res.output_text));
   return { t: frame.t, url: frame.url, board: frame.board, markdown, alt };
 }
