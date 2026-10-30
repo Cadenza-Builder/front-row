@@ -93,7 +93,7 @@ export async function readSyllabus(supabase: Db, userId: string, id: string, fil
         },
       ],
       text: { format: { type: "json_schema", name: "syllabus", strict: true, schema: z.toJSONSchema(Syllabus, { target: "draft-7" }) as Record<string, unknown> } },
-    });
+    }, { timeout: 180_000, maxRetries: 1 }); // a 40k-character read outgrows the 45 s client default
     const out = Syllabus.parse(JSON.parse(res.output_text));
     // The model's numbers are checked, never trusted: a time outside the week is dropped.
     const meets = out.meets.filter((m) => Number.isInteger(m.weekday) && m.weekday >= 0 && m.weekday <= 6 && Number.isInteger(m.minutes) && m.minutes >= 0 && m.minutes < 1440);
