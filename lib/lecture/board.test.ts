@@ -35,9 +35,14 @@ describe("pickSnapshots", () => {
   });
 
   it("pickSnapshots skips frames without a board when looking at the next frame", () => {
-    // The next frame is the next in the list, board or not.
+    // The next frame is the next in the list, board or not. Run 20-30 settles on 30, which has no board, so 20 is read instead.
     const frames = [frame(0, board, true), frame(10, null, false), frame(20, board, true), frame(30, null, true), frame(40, board, false)];
-    expect(pickSnapshots(frames, false).map((f) => f.t)).toEqual([0]);
+    expect(pickSnapshots(frames, false).map((f) => f.t)).toEqual([0, 20]);
+  });
+
+  it("pickSnapshots reads nothing from a run of changed frames that has no board", () => {
+    const frames = [frame(0, board, false), frame(10, null, true), frame(20, null, true), frame(30, board, false)];
+    expect(pickSnapshots(frames, false)).toEqual([]);
   });
 
   it("pickSnapshots does not repeat a first board frame that also changed", () => {

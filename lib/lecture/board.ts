@@ -55,11 +55,21 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
 }
 
 /**
- * Frames worth reading: a board frame that changed once the writing has settled (the next frame, board or not, is unchanged,
- * or there is none), plus the first one with a board when `keepFirst` (the lecture's first segment).
+ * Frames worth reading: from each run of changed frames, the last one with a board, read once the run ends (the next frame,
+ * board or not, is unchanged, or there is none); plus the first one with a board when `keepFirst` (the lecture's first segment).
+ * `frames` must be in time order.
  */
 export function pickSnapshots(frames: Frame[], keepFirst = true): (Frame & { board: Box })[] {
-  const settled = new Set(frames.filter((f, i) => f.changed && (i === frames.length - 1 || !frames[i + 1].changed)));
+  const settled = new Set<Frame>();
+  let last: Frame | null = null; // last frame with a board in the current run of changed frames
+  frames.forEach((f, i) => {
+    if (!f.changed) return;
+    if (f.board) last = f;
+    if (i === frames.length - 1 || !frames[i + 1].changed) {
+      if (last) settled.add(last);
+      last = null;
+    }
+  });
   const withBoard = frames.filter((f): f is Frame & { board: Box } => f.board !== null);
   return withBoard.filter((f, i) => (keepFirst && i === 0) || settled.has(f));
 }
