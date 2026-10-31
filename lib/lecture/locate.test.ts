@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { meta } from "./meta";
-import { locate, parseSam, pickProfessor } from "./locate";
+import { locate, parseSam, pickBoard, pickProfessor } from "./locate";
 
 const fixture = (name: string) => readFileSync(join(__dirname, "fixtures", name), "utf8");
 
@@ -44,6 +44,31 @@ describe("pickProfessor", () => {
   });
 });
 
+describe("pickBoard", () => {
+  const box = (x1: number, y1: number, x2: number, y2: number) => ({ x1, y1, x2, y2, w: 1280, h: 720 });
+  const big = box(0, 50, 700, 650);
+  const small = box(750, 100, 1250, 500);
+
+  it("pickBoard picks the board the professor stands at over a larger blank one", () => {
+    const prof = box(900, 150, 1000, 600); // inside the small board (gap 0); 200 px from the big one
+    expect(pickBoard([big, small], [prof])).toEqual({ board: small, person: prof });
+  });
+
+  it("pickBoard falls back to the largest board when no person is at any board", () => {
+    const student = box(100, 650, 200, 720); // centre y 685, below both boards
+    expect(pickBoard([small, big], [student])).toEqual({ board: big, person: null });
+  });
+
+  it("pickBoard returns null for no boards", () => {
+    expect(pickBoard([], [box(0, 0, 10, 10)])).toBeNull();
+  });
+
+  it("pickBoard prefers the larger board when the professor is equally near two", () => {
+    const prof = box(710, 150, 740, 450); // 10 px from each board
+    expect(pickBoard([small, big], [prof])).toEqual({ board: big, person: prof });
+  });
+});
+
 describe("locate", () => {
   it("locate asks SAM for the board and people and picks the professor", async () => {
     // SAM 3.1 answers one noun phrase; anything else (the old combined list included) finds nothing.
@@ -73,11 +98,47 @@ describe("locate", () => {
     expect(await locate("https://x/f.jpg")).toEqual({
       board: { x1: 8, y1: 53, x2: 946, y2: 461, w: 960, h: 720 },
       person: { x1: 358, y1: 140, x2: 647, y2: 719, w: 960, h: 720 },
+      kind: "blackboard",
     });
   });
 
   it("locate returns nulls when SAM finds nothing", async () => {
     vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: "" } as never);
-    expect(await locate("https://x/f.jpg")).toEqual({ board: null, person: null });
+    expect(await locate("https://x/f.jpg")).toEqual({ board: null, person: null, kind: null });
+  });
+
+  // SAM answers by phrase; counts which phrases were asked.
+  const samAnswers = (outputs: Record<string, string>) => {
+    const asked: string[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
+      const text = body.input[0].content[0].text;
+      asked.push(text);
+      return { output_text: outputs[text] ?? "" };
+    }) as never);
+    return asked;
+  };
+
+  it("locate with a kind asks person and that kind only", async () => {
+    const asked = samAnswers({ whiteboard: fixture("sam-board.txt"), person: fixture("sam-person.txt") });
+    const out = await locate("https://x/f.jpg", "whiteboard");
+    expect(asked.sort()).toEqual(["person", "whiteboard"]);
+    expect(out.board).toMatchObject({ x1: 0, y1: 70, x2: 1010, y2: 576 });
+    expect(out.kind).toBe("whiteboard");
+  });
+
+  it("locate with a kind that finds nothing asks the other two", async () => {
+    const asked = samAnswers({ blackboard: fixture("sam-board.txt"), person: fixture("sam-person.txt") });
+    const out = await locate("https://x/f.jpg", "whiteboard");
+    expect(asked.sort()).toEqual(["blackboard", "person", "projector screen", "whiteboard"]);
+    expect(out.kind).toBe("blackboard");
+  });
+
+  it("locate without a kind asks all four and reports the winning kind", async () => {
+    const asked = samAnswers({ "projector screen": fixture("sam-board.txt"), person: fixture("sam-person.txt") });
+    const out = await locate("https://x/f.jpg");
+    expect(asked.sort()).toEqual(["blackboard", "person", "projector screen", "whiteboard"]);
+    expect(out.kind).toBe("projector screen");
+    expect(out.person).toMatchObject({ x1: 658, y1: 241, x2: 973, y2: 675 });
   });
 });

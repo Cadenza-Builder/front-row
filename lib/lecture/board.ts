@@ -48,7 +48,8 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
         schema: z.toJSONSchema(BoardReading.extend({ alt: z.string() }), { target: "draft-7" }) as Record<string, unknown>,
       },
     },
-  });
+    // One retry, because single 45 s stalls lost reads on the live run.
+  }, { maxRetries: 1 });
   const { markdown, alt } = BoardReading.parse(JSON.parse(res.output_text));
   return { t: frame.t, url: frame.url, board: frame.board, markdown, alt };
 }
@@ -57,4 +58,29 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
 export function pickSnapshots(frames: Frame[], keepFirst = true): (Frame & { board: Box })[] {
   const withBoard = frames.filter((f): f is Frame & { board: Box } => f.board !== null);
   return withBoard.filter((f, i) => (keepFirst && i === 0) || f.changed);
+}
+
+/** The 6-character pieces of a read, ignoring `[unreadable]`, whitespace and case. */
+const pieces = (md: string) => {
+  const s = md.replaceAll("[unreadable]", "").replace(/\s+/g, "").toLowerCase();
+  return new Set(Array.from({ length: Math.max(0, s.length - 5) }, (_, i) => s.slice(i, i + 6)));
+};
+
+/** `a` adds at most 10 pieces to `b`. */
+const within = (a: Set<string>, b: Set<string>) => {
+  let n = 0;
+  for (const p of a) if (!b.has(p) && ++n > 10) return false;
+  return true;
+};
+
+/** Time-ordered reads minus repeats: empty reads go, a read that adds nothing to a kept one goes, and a fuller later read replaces the kept ones it covers. */
+export function dedupeSnaps(snaps: Snapshot[]): Snapshot[] {
+  let kept: { snap: Snapshot; p: Set<string> }[] = [];
+  for (const snap of snaps) {
+    const p = pieces(snap.markdown);
+    if (p.size === 0 || kept.some((k) => within(p, k.p))) continue;
+    kept = kept.filter((k) => !within(k.p, p));
+    kept.push({ snap, p });
+  }
+  return kept.map((k) => k.snap);
 }

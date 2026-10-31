@@ -70,8 +70,16 @@ test("a syllabus fills the course's meeting times and keywords, written as the s
   expect(out).toEqual({ code: 200, body: { meets: [{ weekday: 2, minutes: 600 }], keywords: ["OLS", "residual"] } });
   expect(tables.lecture_courses[0]).toMatchObject({ meets: [{ weekday: 2, minutes: 600 }], keywords: ["OLS", "residual"] });
   expect(mine.lecture_courses[0].keywords).toEqual(["heteroskedasticity"]);
-  expect(h.create).toHaveBeenCalledWith(expect.objectContaining({ model: "muse-spark-1.3" }));
+  expect(h.create.mock.calls[0][0]).toMatchObject({ model: "muse-spark-1.3" });
   expect(JSON.stringify(h.create.mock.calls[0][0])).toContain("Lectures Tuesdays 10:00");
+});
+
+test("a syllabus read gets 100 s and no retry, inside the 120 s route", async () => {
+  const { db } = fakeDb(seed());
+  h.admin = fakeDb(seed()).db;
+  h.create.mockResolvedValue({ output_text: JSON.stringify({ meets: [], keywords: [] }) });
+  await readSyllabus(db, ME, ECO, file("ECO220 syllabus", "syllabus.txt"));
+  expect(h.create.mock.calls[0][1]).toEqual({ timeout: 100_000, maxRetries: 0 });
 });
 
 test("a syllabus run records its tokens, so admin Spend counts Front Row", async () => {

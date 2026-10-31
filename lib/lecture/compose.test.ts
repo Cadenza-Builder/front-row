@@ -192,6 +192,38 @@ describe("compose", () => {
     expect(out).not.toHaveProperty("together");
   });
 
+  // A real lecture (2026-10-30) got a section headed "Placeholder" whose body was "Empty snapshots omitted."
+  const empty = (heading: string, body: string) => ({ heading, body, snaps: [] as number[], exam: [] as { quote: string; t: number }[], boxes: [] as unknown[] });
+  const composeWith = async (sections: unknown[]) => {
+    vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify({ ...notes([]), sections }) } as never);
+    return (await compose({ turns: [], snaps: [snap(30, "$x$")], course: "PHY131", keywords: [] })).notes;
+  };
+
+  it("compose drops a placeholder section", async () => {
+    const out = await composeWith([notes([]).sections[0], empty("Placeholder", "Empty snapshots omitted.")]);
+    expect(out.sections.map((s) => s.heading)).toEqual(["Mass-energy"]);
+  });
+
+  it("compose keeps a short section that has a snapshot, a box or an exam line", async () => {
+    const out = await composeWith([
+      { ...empty("Snap", "Short."), snaps: [0] },
+      { ...empty("Box", "Short."), boxes: [{ kind: "mistake", text: "Reading a fan as a curve." }] },
+      { ...empty("Exam", "Short."), exam: [{ quote: "On the test.", t: 5 }] },
+    ]);
+    expect(out.sections.map((s) => s.heading)).toEqual(["Snap", "Box", "Exam"]);
+  });
+
+  it("compose never drops every section", async () => {
+    const out = await composeWith([empty("A", "Short."), empty("B", "A little longer body.")]);
+    expect(out.sections.map((s) => s.heading)).toEqual(["B"]);
+  });
+
+  it("compose gives the model 180 s and no retry", async () => {
+    const create = vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([])) } as never);
+    await compose({ turns: [], snaps: [], course: "ECO220", keywords: [] });
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 180_000, maxRetries: 0 });
+  });
+
   it("compose keeps a written together", async () => {
     vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify({ ...notes([]), together: "It all ties up." }) } as never);
     const { notes: out } = await compose({ turns: [], snaps: [], course: "PHY131", keywords: [] });

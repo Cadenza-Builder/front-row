@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Box } from "./locate";
 import { meta } from "./meta";
-import { BoardReading, pickSnapshots, readBoard, type Frame } from "./board";
+import { BoardReading, dedupeSnaps, pickSnapshots, readBoard, type Frame, type Snapshot } from "./board";
 
 const board: Box = { x1: 0, y1: 70, x2: 1010, y2: 576, w: 1280, h: 720 };
 const frame = (t: number, b: Box | null, changed: boolean): Frame => ({ t, url: `f${t}.jpg`, board: b, person: null, changed });
@@ -50,6 +50,7 @@ describe("readBoard", () => {
     }) as never);
     const snap = await readBoard(frame(5, board, true) as Frame & { board: Box }, []);
     expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0][1]).toEqual({ maxRetries: 1 });
     expect(snap).toEqual({ t: 5, url: "f5.jpg", board, markdown: "$E = mc^2$", alt: "Einstein's equation" });
   });
 
@@ -72,5 +73,39 @@ describe("readBoard", () => {
     expect(prompt).not.toContain("FAR-BEFORE");
     expect(prompt).not.toContain("FAR-AFTER");
     expect(prompt).toContain("[unreadable]");
+  });
+});
+
+describe("dedupeSnaps", () => {
+  const snap = (t: number, markdown: string): Snapshot => ({ t, url: `f${t}.jpg`, board, markdown, alt: "" });
+  const A = "Kirchhoff's voltage law: $\\sum V = 0$ around any closed loop, so $V_R + V_L + V_C = V$";
+
+  it("dedupeSnaps drops empty and all-unreadable reads", () => {
+    expect(dedupeSnaps([snap(0, ""), snap(10, "[unreadable] [unreadable]")])).toEqual([]);
+  });
+
+  it("dedupeSnaps drops a later read that adds nothing", () => {
+    const again = "KIRCHHOFF'S  voltage law:\n$\\sum V=0$ around any closed   loop, so $V_R+V_L+V_C=V$";
+    expect(dedupeSnaps([snap(10, A), snap(50, again)]).map((s) => s.t)).toEqual([10]);
+  });
+
+  it("dedupeSnaps keeps the fuller later read in place of the earlier", () => {
+    const fuller = A + "\n$$L\\frac{d^2Q}{dt^2}+R\\frac{dQ}{dt}+\\frac1C Q=V$$";
+    expect(dedupeSnaps([snap(10, A), snap(40, fuller)]).map((s) => s.t)).toEqual([40]);
+  });
+
+  it("dedupeSnaps keeps two different boards", () => {
+    const one = "$$\\int_0^\\infty e^{-x^2}\\,dx = \\frac{\\sqrt{\\pi}}{2} \\quad\\text{(Gaussian integral)}$$";
+    const two = "$$\\hat\\beta = (X^TX)^{-1}X^Ty,\\; \\operatorname{Var}(\\hat\\beta) = \\sigma^2(X^TX)^{-1}$$";
+    expect(dedupeSnaps([snap(5, one), snap(15, two)]).map((s) => s.t)).toEqual([5, 15]);
+  });
+
+  it("dedupeSnaps keeps a read that adds more than 10 characters", () => {
+    expect(dedupeSnaps([snap(10, A), snap(20, A + " and $x^2+y^2=r^2$ here")]).map((s) => s.t)).toEqual([20]);
+  });
+
+  it("dedupeSnaps one read is returned unchanged", () => {
+    const one = [snap(10, A)];
+    expect(dedupeSnaps(one)).toEqual(one);
   });
 });
