@@ -20,6 +20,6 @@ test("a closed Front Row is a 404 and creates nothing; open, it creates the cour
   vi.stubEnv("FRONT_ROW_PUBLIC", "1");
   const res = await post();
   expect(res.status).toBe(201);
-  expect(await res.json()).toEqual({ id: expect.any(String), name: "ECO220" });
+  expect(await res.json()).toEqual({ id: expect.any(String), name: "ECO220", icon: "book" });
   vi.unstubAllEnvs();
 });
