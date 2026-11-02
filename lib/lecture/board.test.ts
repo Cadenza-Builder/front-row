@@ -31,6 +31,11 @@ describe("pickSnapshots", () => {
     expect(pickSnapshots(frames, true).map((f) => f.t)).toEqual([0, 20, 40]);
   });
 
+  it("pickSnapshots reads a long run of changed frames every third frame, so an erased board is not lost", () => {
+    const frames = [0, 10, 20, 30, 40, 50].map((t) => frame(t, board, true)).concat(frame(60, board, false));
+    expect(pickSnapshots(frames, false).map((f) => f.t)).toEqual([20, 50]);
+  });
+
   it("pickSnapshots reads a changed frame that ends the segment", () => {
     expect(pickSnapshots([frame(0, board, false), frame(10, board, true)], false).map((f) => f.t)).toEqual([10]);
   });
@@ -104,7 +109,9 @@ describe("readBoard", () => {
     }) as never);
     const snap = await readBoard(jpegFrame(5), []);
     expect(image.startsWith("data:image/jpeg;base64,")).toBe(true);
-    expect(image).not.toBe(jpeg);
+    const sent = await sharp(Buffer.from(image.split(",")[1], "base64")).metadata();
+    const want = cropRect(board, 64, 36);
+    expect([sent.width, sent.height]).toEqual([want.width, want.height]);
     expect(text).not.toContain("x1=");
     expect(snap.url).toBe(jpeg);
   });

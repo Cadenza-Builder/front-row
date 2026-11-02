@@ -84,16 +84,19 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
 
 /**
  * Frames worth reading: from each run of changed frames, the last one with a board, read once the run ends (the next frame,
- * board or not, is unchanged, or there is none); plus the first one with a board when `keepFirst` (the lecture's first segment).
+ * board or not, is unchanged, or there is none) and every RUN_READ frames inside a long run, so a board filled and erased
+ * without a pause is still read; plus the first one with a board when `keepFirst` (the lecture's first segment).
  * `frames` must be in time order.
  */
+const RUN_READ = 3;
 export function pickSnapshots(frames: Frame[], keepFirst = true): (Frame & { board: Box })[] {
   const settled = new Set<Frame>();
   let last: Frame | null = null; // last frame with a board in the current run of changed frames
+  let run = 0;
   frames.forEach((f, i) => {
-    if (!f.changed) return;
+    if (!f.changed) return void (run = 0);
     if (f.board) last = f;
-    if (i === frames.length - 1 || !frames[i + 1].changed) {
+    if (++run % RUN_READ === 0 || i === frames.length - 1 || !frames[i + 1].changed) {
       if (last) settled.add(last);
       last = null;
     }
