@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/browser";
 import { type Box, downsample, encodeWav, missingSegments, overlap, pickProfessor, startLecture } from "./media";
 
 type Landmark = { x: number; y: number; visibility?: number };
-type Pose = { detect(img: HTMLImageElement): { landmarks: Landmark[][] }; detectForVideo(v: HTMLVideoElement, ms: number): { landmarks: Landmark[][] } };
+type Pose = { detect(img: HTMLImageElement): { landmarks: Landmark[][] }; detectForVideo(v: HTMLVideoElement, ms: number): { landmarks: Landmark[][] }; close(): void };
 type Frame = { t: number; changed: boolean };
 
 // MediaPipe from its CDN at a pinned version (as in the mockup), so no new npm dependency: the wasm and model load from there anyway.
@@ -49,7 +49,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     stream: null as MediaStream | null, ac: null as AudioContext | null, an: null as AnalyserNode | null, wake: null as WakeLockSentinel | null,
     id: "", chunks: [] as Float32Array[], count: 0, n: 0,
     wavs: new Map<number, Blob>(), frames: new Map<number, Promise<Frame | null>[]>(), jobs: new Map<number, Promise<void>>(), uploaded: new Set<number>(),
-    raf: 0,
+    raf: 0, warm: false,
   }).current;
   const $ = (s: string) => root.current!.querySelector(s) as HTMLElement;
 
@@ -331,7 +331,10 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
         minPoseDetectionConfidence: 0.4,
         minTrackingConfidence: 0.4,
       });
-    r.pose = await make("GPU").catch(() => make("CPU"));
+    const pose: Pose = await make("GPU").catch(() => make("CPU"));
+    // Loaded on arrival: if the student already left, free its GPU and WASM memory instead of keeping it.
+    if (r.stopped) pose.close();
+    else r.pose = pose;
   }
   const lock = async () => {
     try {
@@ -383,9 +386,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     await ac.resume().catch(() => {});
     startAudio(ac, stream);
     lock();
-    // No pose model (offline CDN, old GPU) still records; only the Professor box is missing.
-    await loadPose("VIDEO").catch((e) => console.warn("pose", e));
-    begin(video);
+    begin(video); // the pose model loads from mount and joins when ready (track() waits for it)
     // iOS can leave the AudioContext stopped: nothing reaches the tap. Say so while there is still a lecture to save.
     setTimeout(() => {
       if (r.stopped || r.paused || r.n || r.count || ask.current?.open) return;
@@ -398,8 +399,9 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     const still = $("img.still") as HTMLImageElement;
     if (!still.hidden) return; // already starting
     still.hidden = false;
+    // No pose model (offline CDN, old GPU) still records; only the Professor box is missing.
+    loadPose("IMAGE").catch((e) => console.warn("pose", e));
     await still.decode();
-    await loadPose("IMAGE").catch((e) => console.warn("pose", e));
     begin(still);
     setTimeout(() => setBoard(SAMPLE_BOARD), 1500); // as the live camera would: found a moment after the start
   }
@@ -418,6 +420,8 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     r.stream?.getTracks().forEach((t) => t.stop());
     r.ac?.close().catch(() => {});
     r.wake?.release().catch(() => {});
+    r.pose?.close();
+    r.pose = null;
   }
 
   async function upload() {
@@ -459,6 +463,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     r.stopped = false; // dev Strict Mode runs this twice, with the cleanup between
     // eslint-disable-next-line react-hooks/set-state-in-effect -- its setState runs after the photo and the pose model load
     if (sample) startSample();
+    // ~15 MB of MediaPipe from the CDN: started on arrival so it is usually ready by the tap. Once, as Strict Mode runs this twice.
+    else if (!r.warm) {
+      r.warm = true;
+      loadPose("VIDEO").catch((e) => console.warn("pose", e));
+    }
     const onVisible = () => {
       if (document.visibilityState !== "visible" || r.stopped || !r.src) return;
       // iOS drops the wake lock and suspends audio in the background; take both back on return.
