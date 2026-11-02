@@ -1,5 +1,5 @@
 node_modules/
 .env
 .env.*
-notes.json
-sample.mp4
+/notes.json
+/sample.mp4
