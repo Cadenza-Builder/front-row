@@ -41,11 +41,13 @@ describe("processSegment", () => {
     vi.mocked(readBoard)
       .mockRejectedValueOnce(new Error("alt over 200"))
       .mockImplementationOnce(async (f) => ({ t: f.t, url: f.url, board: f.board, markdown: "$x$", alt: "x" }));
-    const out = await processSegment({ wav, offset: 0, frames: [frame(0), frame(10), frame(20)], keywords: [] });
+    // Frame 20 is unchanged, so frame 10's writing has settled and it is read; frame 30 changed, so it is located (and fails).
+    const out = await processSegment({ wav, offset: 0, frames: [frame(0), frame(10), { ...frame(20), changed: false }, frame(30)], keywords: [] });
     expect(out.snaps.map((s) => s.t)).toEqual([10]);
     // Board reads get the segment's transcript to settle unclear symbols.
     expect(vi.mocked(readBoard).mock.calls[0][1]).toEqual([{ start: 1, end: 2, text: "hi" }]);
-    expect(out.frames[2].board).toBeNull();
+    expect(out.frames[2].board).toEqual(board);
+    expect(out.frames[3].board).toBeNull();
   });
 
   it("processSegment starts locating before the transcript is back", async () => {
