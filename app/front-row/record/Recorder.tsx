@@ -1,12 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { changeTracker } from "@/lib/lecture/changed";
 import { createClient } from "@/lib/supabase/browser";
-import { downsample, encodeWav, missingSegments, startLecture } from "./media";
+import { type Box, downsample, encodeWav, missingSegments, overlap, pickProfessor, startLecture } from "./media";
 
-type Box = { x: number; y: number; w: number; h: number };
 type Landmark = { x: number; y: number; visibility?: number };
 type Pose = { detect(img: HTMLImageElement): { landmarks: Landmark[][] }; detectForVideo(v: HTMLVideoElement, ms: number): { landmarks: Landmark[][] } };
 type Frame = { t: number; changed: boolean };
@@ -17,22 +17,15 @@ const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/p
 const SEG = 120; // seconds per segment, as lib/lectures/store.ts expects
 const RATE = 16000;
 const FRAME_EVERY = 10;
-// shortcut: a fixed board box on the live camera (the server finds the board on every frame anyway); upgrade when the board is located on device.
-const LIVE_BOARD: Box = { x: 0.04, y: 0.08, w: 0.78, h: 0.6 };
+const FULL: Box = { x: 0, y: 0, w: 1, h: 1 }; // no board found yet: the whole frame stands in for it
+const MISS_WAIT = 30; // seconds between asks while no board has been found, so a phone facing a wall costs little
+const RECHECK = 120; // seconds between asks once found: a small knock to the phone moves the picture less than r.moved notices
 const SAMPLE_BOARD: Box = { x: 0, y: 68 / 854, w: 1010 / 1280, h: 508 / 854 }; // SAM 3.1's box on the sample photo (lib/lecture/fixtures/sam-board.txt)
 const AMBER = "#f59e0b", BONE = "#f5f2ea";
+const ease = (a: Box, b: Box, k: number): Box => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
 const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 11], [0, 12]];
 const seen = (l: Landmark) => (l.visibility ?? 1) > 0.5;
 
-function overlap(a: Box, b: Box) {
-  const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
-  return (x * y) / (b.w * b.h);
-}
-// On the phone: the person whose centre is inside the board's width, highest up (the server's pickProfessor in lib/lecture/locate.ts differs).
-function pickProfessor(people: (Box & { l: Landmark[] })[], board: Box) {
-  const at = people.filter((p) => p.x + p.w / 2 > board.x && p.x + p.w / 2 < board.x + board.w);
-  return (at.length ? at : people).sort((a, b) => a.y - b.y)[0] ?? null;
-}
 const mmss = (s: number) => `${String((s / 60) | 0).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 export function Recorder({ course, userId, sample }: { course: string | null; userId: string | null; sample: boolean }) {
@@ -50,9 +43,9 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
   const [now] = useState(() => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false }));
   // Everything the frame loop and the audio tap touch lives here, not in state: they run 60 times a second.
   const r = useRef({
-    src: null as HTMLVideoElement | HTMLImageElement | null, pose: null as Pose | null, board: LIVE_BOARD,
+    src: null as HTMLVideoElement | HTMLImageElement | null, pose: null as Pose | null, board: null as Box | null, seen: null as Box | null, readAt: -Infinity, askAt: 0, asking: false,
     prof: null as Box | null, shown: null as Box | null, lms: null as Landmark[] | null, lastVideoTime: -1,
-    paused: false, stopped: false, t0: 0, pausedFor: 0, pausedAt: 0, reads: 0, nextFrame: 0, tracker: changeTracker(),
+    paused: false, stopped: false, t0: 0, pausedFor: 0, pausedAt: 0, reads: 0, nextFrame: 0, tracker: changeTracker(), moved: changeTracker(0.25),
     stream: null as MediaStream | null, ac: null as AudioContext | null, an: null as AnalyserNode | null, wake: null as WakeLockSentinel | null,
     id: "", chunks: [] as Float32Array[], count: 0, n: 0,
     wavs: new Map<number, Blob>(), frames: new Map<number, Promise<Frame | null>[]>(), jobs: new Map<number, Promise<void>>(), uploaded: new Set<number>(),
@@ -78,9 +71,17 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     const [sw, sh] = srcSize(), W = innerWidth, H = innerHeight, k = Math.max(W / sw, H / sh);
     return [fx * sw * k + (W - sw * k) / 2, fy * sh * k + (H - sh * k) / 2];
   };
-  const crop = (c: CanvasRenderingContext2D, w: number, h: number) => {
-    const [sw, sh] = srcSize(), b = r.board;
+  const crop = (c: CanvasRenderingContext2D, w: number, h: number, b = r.board ?? FULL) => {
+    const [sw, sh] = srcSize();
     c.drawImage(r.src!, b.x * sw, b.y * sh, b.w * sw, b.h * sh, 0, 0, w, h);
+  };
+  /** A 32×18 grey thumbnail of box `b` of the frame, the size changed.ts compares. */
+  const grey = (b?: Box) => {
+    const tc = Object.assign(document.createElement("canvas"), { width: 32, height: 18 }).getContext("2d", { willReadFrequently: true })!;
+    crop(tc, 32, 18, b);
+    const d = tc.getImageData(0, 0, 32, 18).data, g = new Uint8Array(32 * 18);
+    for (let i = 0; i < g.length; i++) g[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    return g;
   };
 
   // Uploads segment n: its frames, its WAV, then the segment route. Rejects on failure; the WAV stays for a retry.
@@ -137,15 +138,9 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     const t = sample ? elapsed() : audioTime();
     if (t < r.nextFrame) return;
     r.nextFrame = Math.floor(t / FRAME_EVERY) * FRAME_EVERY + FRAME_EVERY;
-    if (r.prof && overlap(r.prof, r.board) > 0.35) return;
-    const thumb = document.createElement("canvas");
-    thumb.width = 32;
-    thumb.height = 18;
-    const tc = thumb.getContext("2d", { willReadFrequently: true })!;
-    crop(tc, 32, 18);
-    const d = tc.getImageData(0, 0, 32, 18).data, grey = new Uint8Array(32 * 18);
-    for (let i = 0; i < grey.length; i++) grey[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
-    const changed = r.tracker(grey);
+    if (!sample) findBoard(t);
+    if (r.prof && overlap(r.prof, r.board ?? FULL) > 0.35) return;
+    const changed = r.tracker(grey());
     if (changed) boardRead(t);
     if (sample) return;
     const n = r.n, at = Math.floor(t);
@@ -161,7 +156,46 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     });
     r.frames.set(n, [...(r.frames.get(n) ?? []), up]);
   }
+  // The live outline: SAM 3.1 through the server at the start, when the picture changes a lot (the phone was moved),
+  // every MISS_WAIT s while no board is found and every RECHECK s once one is. One ask at a time; a failed ask keeps the last board.
+  function findBoard(t: number) {
+    // Checked before r.moved: a move seen while an ask is out must still trigger the next ask.
+    if (r.asking || !r.id || r.askAt === Infinity || !srcSize()[0]) return;
+    if (!r.moved(grey(FULL)) && t < r.askAt) return;
+    r.asking = true;
+    r.askAt = t + (r.board ? RECHECK : MISS_WAIT);
+    const [sw, sh] = srcSize(), k = Math.min(1, 640 / Math.max(sw, sh)), small = document.createElement("canvas");
+    small.width = Math.round(sw * k);
+    small.height = Math.round(sh * k);
+    small.getContext("2d")!.drawImage(r.src!, 0, 0, small.width, small.height);
+    fetch(`/api/lectures/${r.id}/board`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ frame: small.toDataURL("image/jpeg", 0.7) }) })
+      .then((res) => {
+        if (res.status === 409) r.askAt = Infinity; // the lecture is no longer recording: stop asking
+        return res.ok ? res.json() : null;
+      })
+      .then((out: { board: Box | null } | null) => {
+        // No board this time (the professor in front of it, the lights down) keeps the one already found.
+        if (out?.board || (out && !r.board)) setBoard(out.board);
+      })
+      .catch((e) => console.warn("board", e))
+      .finally(() => (r.asking = false));
+  }
+  function setBoard(b: Box | null) {
+    if (r.stopped) return; // a reply after Stop or leaving the page
+    const moved = !b || !r.board || overlap(b, r.board) < 0.9;
+    r.board = b;
+    // A new crop is not a new board: the change check starts over from this view of it. The same box (a recheck) keeps
+    // its reference, so writing done while the ask was out still counts as new.
+    if (moved) {
+      r.tracker = changeTracker();
+      r.tracker(grey());
+    }
+    if (!b) r.seen = null;
+    $("[data-board]").classList.toggle("on", !!b);
+    $("[data-board] b").textContent = b ? "in view" : "finding";
+  }
   function boardRead(t: number) {
+    r.readAt = performance.now();
     r.reads++;
     $("[data-reads]").textContent = String(r.reads);
     const flash = $(".snap-flash");
@@ -184,30 +218,41 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const box = (x: number, y: number, w: number, h: number, color: string, dash: number[], label: string) => {
-      ctx.strokeStyle = color;
+    const box = (x: number, y: number, w: number, h: number, label: string) => {
+      ctx.strokeStyle = BONE;
       ctx.lineWidth = 2;
-      ctx.setLineDash(dash);
+      ctx.setLineDash([6, 6]);
       ctx.beginPath();
       ctx.roundRect(x, y, w, h, 10);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.font = "500 12px Helvetica Neue, Helvetica, Arial";
       const tw = ctx.measureText(label).width + 20, lx = Math.max(x, 0) + 8, ly = Math.max(y, 0) + 8;
-      ctx.fillStyle = color;
+      ctx.fillStyle = BONE;
       ctx.beginPath();
       ctx.roundRect(lx, ly, tw, 22, 11);
       ctx.fill();
-      ctx.fillStyle = color === AMBER ? "#1a0d00" : "#05050a";
+      ctx.fillStyle = "#05050a";
       ctx.fillText(label, lx + 10, ly + 15);
     };
-    const b = r.board, [bx, by] = toScreen(b.x, b.y), [bx2, by2] = toScreen(b.x + b.w, b.y + b.h);
-    box(bx, by, bx2 - bx, by2 - by, AMBER, [], `Board · read ${r.reads}`);
+    // The board (take B · Glow): drawn only once found, easing in from a little wider and following it; a faint amber wash
+    // that brightens for 1.5 s when the board is read.
+    if (r.board) {
+      const b = (r.seen = ease(r.seen ?? { x: r.board.x - 0.03, y: r.board.y - 0.03, w: r.board.w + 0.06, h: r.board.h + 0.06 }, r.board, 0.12));
+      const [bx, by] = toScreen(b.x, b.y), [bx2, by2] = toScreen(b.x + b.w, b.y + b.h), lit = Math.max(0, 1 - (performance.now() - r.readAt) / 1500);
+      ctx.setLineDash([]);
+      ctx.fillStyle = `rgba(245,158,11,${0.06 + lit * 0.14})`;
+      ctx.strokeStyle = `rgba(245,158,11,${0.55 + lit * 0.45})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bx2 - bx, by2 - by, 12);
+      ctx.fill();
+      ctx.stroke();
+    }
     if (!r.prof) return;
-    const p = r.prof, s = r.shown ? { x: r.shown.x + (p.x - r.shown.x) * 0.25, y: r.shown.y + (p.y - r.shown.y) * 0.25, w: r.shown.w + (p.w - r.shown.w) * 0.25, h: r.shown.h + (p.h - r.shown.h) * 0.25 } : p;
-    r.shown = s;
+    const s = (r.shown = r.shown ? ease(r.shown, r.prof, 0.25) : r.prof);
     const [px, py] = toScreen(s.x, s.y), [px2, py2] = toScreen(s.x + s.w, s.y + s.h);
-    box(px - 8, py - 8, px2 - px + 16, py2 - py + 16, BONE, [6, 6], "Professor");
+    box(px - 8, py - 8, px2 - px + 16, py2 - py + 16, "Professor");
     const l = r.lms;
     if (!l) return;
     ctx.strokeStyle = "rgba(245,242,234,.85)";
@@ -245,7 +290,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
       const xs = v.map((p) => p.x), ys = v.map((p) => p.y), x = Math.min(...xs), y = Math.min(...ys);
       return [{ x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, l }];
     });
-    const p = pickProfessor(people, r.board);
+    const p = pickProfessor(people, r.board ?? FULL, r.prof);
     r.prof = p;
     r.lms = p?.l ?? null;
     $("[data-prof]").classList.toggle("on", !!p);
@@ -354,9 +399,9 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     if (!still.hidden) return; // already starting
     still.hidden = false;
     await still.decode();
-    r.board = SAMPLE_BOARD;
     await loadPose("IMAGE").catch((e) => console.warn("pose", e));
     begin(still);
+    setTimeout(() => setBoard(SAMPLE_BOARD), 1500); // as the live camera would: found a moment after the start
   }
 
   function togglePause() {
@@ -494,9 +539,9 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
           <i />
           Professor <b>finding</b>
         </span>
-        <span data-board="" className={started ? "on" : undefined}>
+        <span data-board="">
           <i />
-          Board <b>in view</b>
+          Board <b>finding</b>
         </span>
       </div>
       <div className="dock glass">
@@ -582,6 +627,8 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
 
       {!started && (
         <div className="start">
+          {/* Nothing exists before Start Recording, so leaving loses nothing; once recording, Stop is the way out. */}
+          <Link className="back" href="/front-row/home" aria-label="Close"><span className="tile"><svg className="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></span></Link>
           <p className="label">{[name, `Today ${now}`].filter(Boolean).join(" · ")}</p>
           <h1>
             <span className="light">Point at</span> <span className="cz-grad">the board.</span>

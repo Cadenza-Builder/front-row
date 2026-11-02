@@ -2,12 +2,13 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { fakeClient } from "./fakeClient";
 
-const h = vi.hoisted(() => ({ admin: null as unknown, processSegment: vi.fn() }));
+const h = vi.hoisted(() => ({ admin: null as unknown, processSegment: vi.fn(), locate: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.admin }));
 vi.mock("@/lib/lecture/pipeline", async (actual) => ({ ...(await actual<object>()), processSegment: h.processSegment, finishLecture: vi.fn() }));
 vi.mock("@/lib/companion/search", () => ({ indexFiles: vi.fn() }));
+vi.mock("@/lib/lecture/locate", () => ({ locate: h.locate }));
 
-import { createLecture, deleteLecture, linkLecture, renameLecture, saveSegment } from "./store";
+import { createLecture, deleteLecture, findBoard, linkLecture, renameLecture, saveSegment } from "./store";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const OTHER = "00000000-0000-4000-8000-0000000000b2";
@@ -35,6 +36,7 @@ const use = (db: ReturnType<typeof fakeClient>) => ((h.admin = db.client), db);
 
 beforeEach(() => {
   h.processSegment.mockReset();
+  h.locate.mockReset();
 });
 
 test("create without consent returns 409", async () => {
@@ -179,4 +181,41 @@ test("a segment later than the lecture has been running is refused before any mo
   expect((await saveSegment(db.client, ME, LEC, "5", { frames: [] })).code).toBe(400);
   expect(h.processSegment).not.toHaveBeenCalled();
   expect(db.tables.lecture_segments ?? []).toEqual([]);
+});
+
+const FRAME = { frame: "data:image/jpeg;base64,/9j/AAAA" };
+// A lecture started a minute ago: the seed's is days old, past the six-hour ceiling.
+const live = () => { const db = fakeClient(seed()); h.admin = db.client; db.tables.lectures[0].started_at = new Date(Date.now() - 60_000).toISOString(); return db; };
+
+test("findBoard returns SAM's board as fractions of the frame", async () => {
+  const db = live();
+  h.locate.mockResolvedValue({ board: { x1: 64, y1: 36, x2: 576, y2: 288, w: 640, h: 360 }, person: null });
+  const out = await findBoard(db.client, ME, LEC, FRAME);
+  expect(h.locate).toHaveBeenCalledWith(FRAME.frame);
+  expect(out.code).toBe(200);
+  const b = out.body.board as Record<string, number>;
+  expect([b.x, b.y, b.w, b.h].map((v) => +v.toFixed(3))).toEqual([0.1, 0.1, 0.8, 0.7]);
+});
+
+test("findBoard says null when SAM finds no board", async () => {
+  const db = live();
+  h.locate.mockResolvedValue({ board: null, person: null });
+  expect(await findBoard(db.client, ME, LEC, FRAME)).toEqual({ code: 200, body: { board: null } });
+});
+
+test("findBoard spends nothing on someone else's lecture, one not recording, or a body that is not a JPEG", async () => {
+  const db = live();
+  expect((await findBoard(db.client, ME, FOREIGN, FRAME)).code).toBe(404);
+  expect((await findBoard(db.client, ME, LEC, { frame: "data:image/png;base64,AAAA" })).code).toBe(400);
+  expect((await findBoard(db.client, ME, LEC, { frame: "https://evil.test/x.jpg" })).code).toBe(400);
+  db.tables.lectures[0].status = "processing";
+  expect((await findBoard(db.client, ME, LEC, FRAME)).code).toBe(409);
+  expect(h.locate).not.toHaveBeenCalled();
+});
+
+test("findBoard refuses a lecture past the six-hour ceiling, so an unfinished lecture is not a forever SAM tap", async () => {
+  const db = use(fakeClient(seed()));
+  db.tables.lectures[0].started_at = new Date(Date.now() - 6 * 3600_000 - 60_000).toISOString();
+  expect((await findBoard(db.client, ME, LEC, FRAME)).code).toBe(409);
+  expect(h.locate).not.toHaveBeenCalled();
 });

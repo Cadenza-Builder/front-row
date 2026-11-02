@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import type { Snapshot } from "@/lib/lecture/board";
+import { frontRowOpen } from "@/lib/lectures/open";
 import { getUser } from "@/lib/supabase/server";
 import type { Notes } from "@/lib/lecture/compose";
 import { LectureNotes } from "./LectureNotes";
@@ -15,6 +16,7 @@ export const metadata = { title: "Lecture Notes" };
 /** One lecture: Wait while its notes are written, Read once they are. The browser reads only its own (RLS). */
 export default async function LecturePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const { supabase, userId } = await getUser();
+  if (!frontRowOpen(userId ?? undefined)) notFound();
   if (!userId) redirect("/sign-in?from=front-row");
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   if (!z.uuid().safeParse(id).success) notFound();

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { frontRowOpen } from "@/lib/lectures/open";
 import { getUser } from "@/lib/supabase/server";
 import { LandingMotion } from "../LandingMotion";
+import { RequestAccess } from "./RequestAccess";
 import "../screen-landing.css";
 import "./screen-front-row.css";
 
@@ -15,7 +17,7 @@ const SAY = "Every AI note-taker listens. Front Row also watches: the board, the
 const FAQ: [string, string][] = [
   ["What is Front Row?", "Front Row turns a lecture into notes. Your phone faces the board; Front Row reads the board, hears the lecture and writes notes with sections, the maths as written and exam hints."],
   ["Does it record video?", "No. It keeps the audio and a photo of the board when the board changes. The audio is deleted once your notes are written."],
-  ["Can I record any lecture?", "Only one you may record. Front Row asks you to confirm that your professor or your accessibility office said yes, once per course."],
+  ["Can I record any lecture?", "Only if your accessibility office has approved it for you."],
   ["What do I need?", "A phone with a view of the board, and somewhere to lean it. Plugged in is best for a long lecture."],
   ["Where do my notes go?", "They stay in Front Row under the course. You can download them as PDF or Word, or add them to a week in Cadenza so your lesson and practice use them."],
 ];
@@ -26,6 +28,8 @@ const SAMPLE = "/front-row/sample";
 export default async function FrontRowLanding() {
   const { userId } = await getUser();
   const start = userId ? "/front-row/home" : "/sign-in?from=front-row";
+  // Recording is closed to the public (docs/front-row-request-access-plan.md): everyone else asks for access.
+  const open = frontRowOpen(userId ?? undefined);
   return (
     <div className="s-landing fr-landing">
       <nav className="cz-nav cz-nav--fixed" aria-label="Main">
@@ -34,17 +38,17 @@ export default async function FrontRowLanding() {
         <a className="cz-nav__link" href="#how">How It Works</a>
         <a className="cz-nav__link" href="#privacy">Privacy</a>
         <a className="cz-nav__link" href="#faq">FAQ</a>
-        <Link className="cz-btn cz-btn--ghost cz-btn--plain cz-nav__cta" href={start}>My Lectures</Link>
+        {open ? <Link className="cz-btn cz-btn--ghost cz-btn--plain cz-nav__cta" href={start}>My Lectures</Link> : <a className="cz-btn cz-btn--ghost cz-btn--plain cz-nav__cta" href="#request">Request Access</a>}
       </nav>
 
       <header className="frh">
-        <div className="vfr" aria-hidden="true"><i /><i /><i /><i /><span className="rec"><b />REC <time id="tc">00:14:20</time></span><span className="meta">Board found · Sound good</span><span className="thirds" /></div>
+        <div className="vfr" aria-hidden="true"><i /><i /><i /><i /><span className="rec"><b />REC <time id="tc">00:14:20</time></span><span className="meta">Board found · Sound good</span></div>
         <div className="copy">
           <div className="found"><span className="lab">Board</span>
             <h1 className="display"><span className="light">Notes that</span><br /><span className="cz-grad">watch the board.</span></h1>
           </div>
           <p className="lead">Point your phone at the board. Front Row writes the notes.</p>
-          <div className="cta"><Link className="cz-btn cz-btn--shimmer" href={start}><span className="cz-btn__label">Record a Lecture</span><span className="cz-btn__arrow">{ARROW(16)}</span></Link><Link className="cz-btn cz-btn--ghost" href={SAMPLE}>See Sample Notes</Link></div>
+          {open ? <div className="cta"><Link className="cz-btn cz-btn--shimmer" href={start}><span className="cz-btn__label">Record a Lecture</span><span className="cz-btn__arrow">{ARROW(16)}</span></Link><Link className="cz-btn cz-btn--ghost" href={SAMPLE}>See Sample Notes</Link></div> : <RequestAccess sample={SAMPLE} />}
         </div>
       </header>
 

@@ -1,0 +1,47 @@
+/* Front Row's opening: the Intro (take A · Draw) and the Loading after sign-in. The <style> of
+   mockups/front-row/home/home.html ("Opening"), scoped to .fr-intro / .fr-load. Keyframes prefixed fr-. */
+:is(.fr-intro,.fr-load){position:fixed;inset:0;z-index:70;display:grid;place-content:center;justify-items:center;gap:24px;padding:clamp(16px,4vw,48px);text-align:center;background:#050507;color:#f0f0f5;overflow:hidden;margin:0}
+:is(.fr-intro,.fr-load)::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 60% at 50% 125%,rgba(234,88,12,.55),rgba(245,158,11,.14) 40%,transparent 70%)}
+:is(.fr-intro,.fr-load)>*{position:relative;margin:0}
+
+/* Intro: the camera line draws itself, the lens closes, the dot pops, then the words; the horizon fades in. */
+.fr-intro{animation:fr-out .5s ease 2.6s forwards}
+.fr-intro::before{opacity:0;animation:fr-in 1.2s ease .6s forwards}
+.fr-intro .cam{width:120px;height:120px;overflow:visible}
+.fr-intro .cam .tile{fill:#0b0b10;stroke:rgba(255,255,255,.12);stroke-width:.4}
+.fr-intro .cam .ln{stroke-width:1.6;stroke-dasharray:1;stroke-dashoffset:1;animation:fr-draw 1s cubic-bezier(.6,0,.2,1) .2s forwards}
+.fr-intro .cam .lens{animation-delay:.55s}
+.fr-intro .cam .dot{transform-origin:16px 16.8px;transform:scale(0);animation:fr-pop .45s cubic-bezier(.3,1.6,.5,1) 1s forwards}
+.fr-intro h1{font-size:clamp(36px,6vw,64px);line-height:1.05;letter-spacing:-.045em;font-weight:700;opacity:0;transform:translateY(12px);animation:fr-rise .7s cubic-bezier(.2,.8,.2,1) 1.15s forwards}
+.fr-intro h1 .lt{font-weight:300}
+.fr-intro p{display:flex;align-items:center;gap:12px;color:#a8a8b8;font-size:clamp(22px,2.6vw,30px);font-weight:300;opacity:0;transform:translateY(8px);animation:fr-rise .7s cubic-bezier(.2,.8,.2,1) 1.4s forwards}
+.fr-intro p img{width:clamp(32px,3.4vw,44px);height:clamp(32px,3.4vw,44px)}
+.fr-intro p b{color:#f0f0f5;font-weight:700;letter-spacing:-.02em}
+
+/* Loading: the mark breathes over a 1.3s orange bar, then the gate fades and Home rises in. */
+.fr-load{animation:fr-out .5s ease 1.5s forwards}
+.fr-load .cam{width:72px;height:72px;animation:fr-mark-breathe 1.6s ease-in-out infinite}
+.fr-load .bar{width:220px;height:3px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden}
+.fr-load .bar i{display:block;height:100%;width:0;background:linear-gradient(100deg,#fcd34d,#f59e0b 35%,#f97316 68%,#ea580c);animation:fr-fill 1.3s cubic-bezier(.4,0,.2,1) forwards}
+.fr-load p{color:#a8a8b8;font-size:17px}
+html[data-theme=light] .fr-load{background:#fde9d4;color:#2b1606}
+html[data-theme=light] .fr-load::before{background:radial-gradient(120% 60% at 50% 125%,rgba(251,146,60,.35),rgba(252,211,77,.12) 40%,transparent 70%)}
+html[data-theme=light] .fr-load .bar{background:#fbe3c9}
+html[data-theme=light] .fr-load p{color:#80583a}
+
+/* Home rises in ((app)/layout.tsx and home/Home.tsx class names): the sidebar slides, the sections rise, the course cards stagger. */
+.fr-enter .frs>.side{animation:fr-slide .6s cubic-bezier(.2,.8,.2,1) both}
+.fr-enter :is(.s-fr-home>*,.s-fr-home .grid>*){animation:fr-rise2 .7s cubic-bezier(.2,.8,.2,1) both}
+.fr-enter .s-fr-home>:nth-child(2){animation-delay:.08s}.fr-enter .s-fr-home>:nth-child(3){animation-delay:.16s}.fr-enter .s-fr-home>:nth-child(4){animation-delay:.24s}
+.fr-enter .s-fr-home .grid>:nth-child(1){animation-delay:.24s}.fr-enter .s-fr-home .grid>:nth-child(2){animation-delay:.3s}.fr-enter .s-fr-home .grid>:nth-child(3){animation-delay:.36s}.fr-enter .s-fr-home .grid>:nth-child(4){animation-delay:.42s}
+
+@keyframes fr-out{to{opacity:0;visibility:hidden}}
+@keyframes fr-in{to{opacity:1}}
+@keyframes fr-draw{to{stroke-dashoffset:0}}
+@keyframes fr-pop{to{transform:scale(1)}}
+@keyframes fr-rise{to{opacity:1;transform:none}}
+@keyframes fr-mark-breathe{50%{transform:scale(1.06);filter:drop-shadow(0 0 18px rgba(245,158,11,.5))}}
+@keyframes fr-fill{to{width:100%}}
+@keyframes fr-rise2{from{opacity:0;transform:translateY(16px)}}
+@keyframes fr-slide{from{opacity:0;transform:translateX(-16px)}}
+@media (prefers-reduced-motion:reduce){:is(.fr-intro,.fr-load,.fr-enter) *,:is(.fr-intro,.fr-load){animation-duration:1ms!important;animation-delay:0s!important}}
