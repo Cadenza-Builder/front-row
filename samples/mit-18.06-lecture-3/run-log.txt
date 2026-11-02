@@ -1,0 +1,6 @@
+lecture: readBoard failed on frame 100s, skipped: Request timed out.
+lecture: readBoard failed on frame 150s, skipped: Request timed out.
+lecture: readBoard failed on frame 290s, skipped: Request timed out.
+lecture: readBoard failed on frame 440s, skipped: Request timed out.
+lecture: readBoard failed on frame 500s, skipped: Request timed out.
+Meta API calls: { '/v1/asr/transcribe': 6, 'sam-3.1': 92, 'muse-spark-1.3': 26 }
