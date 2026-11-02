@@ -4,6 +4,7 @@ import { refused } from "@/lib/billing/plans";
 import { indexFiles } from "@/lib/companion/search";
 import type { Snapshot } from "@/lib/lecture/board";
 import { toMarkdown, type Notes } from "@/lib/lecture/compose";
+import { locate } from "@/lib/lecture/locate";
 import { finishLecture, processSegment } from "@/lib/lecture/pipeline";
 import { runTokens } from "@/lib/openai/client";
 import { SOMETHING_WRONG } from "@/lib/runs/startRun";
@@ -34,6 +35,8 @@ const Create = z.strictObject({ lectureCourseId: z.uuid(), source: z.enum(["phon
 const Rename = z.strictObject({ title: z.string().trim().min(1).max(200) });
 const Link = z.strictObject({ weekId: z.uuid() });
 const Frames = z.strictObject({ frames: z.array(z.strictObject({ t: z.number().min(0).max(MAX_SEGMENTS * SEG), changed: z.boolean() })).max(60) });
+// A phone frame for the live board outline: a JPEG data URL only (never a URL SAM would fetch), ~640 px wide.
+const Frame = z.strictObject({ frame: z.string().max(400_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/) });
 const Finish = z.strictObject({ segmentCount: z.number().int().min(1).max(MAX_SEGMENTS) });
 
 /** The caller's lecture under RLS, or null (unknown, foreign or not a uuid). */
@@ -111,6 +114,20 @@ async function runSegment(supabase: Db, admin: Db, userId: string, lectureId: st
   const result: Segment = { turns: out.turns, frames: out.frames.map(path), snaps: out.snaps.map(path) };
   await admin.from("lecture_segments").upsert({ lecture_id: lectureId, user_id: userId, n, status: "done", result: result as never }, { onConflict: "lecture_id,n" }).throwOnError();
   return result;
+}
+
+/** The board in a frame from a lecture that is recording, as fractions of the frame, for the phone's live outline. */
+export async function findBoard(supabase: Db, userId: string, id: string, input: unknown): Promise<Reply> {
+  const lecture = await load(supabase, userId, id);
+  if (!lecture) return NOT_FOUND;
+  const parsed = Frame.safeParse(input);
+  if (!parsed.success) return bad("Send one JPEG frame.");
+  // Past the six-hour ceiling a lecture left recording is not a lecture anymore, so it stops buying SAM calls.
+  // shortcut: no per-lecture count of asks; add one (a column, as lastSegment bounds segments) before Front Row is public.
+  if (lecture.status !== "recording" || lastSegment(lecture) >= MAX_SEGMENTS) return { code: 409, body: { error: "This lecture is no longer recording." } };
+  // shortcut: locate also asks SAM for the person (4 calls, not 3); a board-only call lands with lib/lecture's P1 work.
+  const { board: b } = await locate(parsed.data.frame);
+  return { code: 200, body: { board: b && { x: b.x1 / b.w, y: b.y1 / b.h, w: (b.x2 - b.x1) / b.w, h: (b.y2 - b.y1) / b.h } } };
 }
 
 export async function saveSegment(supabase: Db, userId: string, id: string, nParam: string, input: unknown): Promise<Reply> {

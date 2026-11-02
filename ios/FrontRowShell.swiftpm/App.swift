@@ -24,7 +24,8 @@ struct Shell: UIViewRepresentable {
         let web = WKWebView(frame: .zero, configuration: config)
         web.uiDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
-        web.load(URLRequest(url: URL(string: "https://www.studycadenza.com/front-row/home")!))
+        // Sign-in first: signed out, Front Row is a 404 with no way in; signed in, proxy.ts sends Front Row users to /front-row/home.
+        web.load(URLRequest(url: URL(string: "https://www.studycadenza.com/sign-in?from=front-row")!))
         return web
     }
 

@@ -1,0 +1,46 @@
+/* Front Row Account (mockups/front-row/home/home.html#account, PR #266). Tokens come from Shell's .frs; sizes in rem so Larger text grows them. */
+.s-fr-account{padding-top:var(--space-8)}
+.s-fr-account .mute{color:var(--mute)}
+.s-fr-account .label{font-size:.8125rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:0}
+.s-fr-account h1{margin-top:var(--space-2);font-size:clamp(2rem,4vw,2.75rem);line-height:1.05;letter-spacing:-.03em;font-weight:700}
+.s-fr-account h2{font-size:1.375rem;letter-spacing:-.02em;font-weight:700}
+.s-fr-account .acols{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-12) var(--space-8);margin-top:var(--space-12)}
+.s-fr-account .group{margin-top:var(--space-4);border-radius:var(--r-2xl);background:color-mix(in srgb,var(--c1) 82%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 var(--rule),inset 0 0 0 1px var(--hair);overflow:hidden}
+.s-fr-account .set{display:flex;align-items:center;gap:var(--space-4);width:100%;min-height:64px;padding:var(--space-3) var(--space-6);border:0;border-top:1px solid var(--hair);background:none;color:inherit;font:inherit;font-size:1.0625rem;text-align:left;cursor:pointer}
+.s-fr-account .set:first-child{border-top:0}
+.s-fr-account div.set{cursor:default}
+.s-fr-account .set .l{flex:1;min-width:0}
+.s-fr-account .set small{display:block;color:var(--mute);font-size:.875rem}
+.s-fr-account .set b{display:block}
+.s-fr-account .set .v{color:var(--mute);font-size:.9375rem}
+.s-fr-account .set.danger{color:var(--rose)}
+.s-fr-account .ini{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;background:var(--grad-amber);color:var(--on-amber);font-weight:700;font-size:1.125rem;flex:none}
+.s-fr-account .seg{display:inline-flex;gap:0;box-shadow:none;padding:var(--space-1);border-radius:var(--r-lg);background:var(--c2)}
+.s-fr-account .seg button{min-height:36px;padding:0 var(--space-3);border:0;border-radius:8px;background:none;font:inherit;font-size:.9375rem;font-weight:500;color:var(--mute);white-space:nowrap;cursor:pointer}
+.s-fr-account .seg button[aria-pressed=true]{background:var(--c1);color:var(--text);font-weight:500;box-shadow:inset 0 1px 0 var(--rule),0 0 0 1px var(--hair)}
+.s-fr-account .sw{position:relative;width:48px;height:28px;border:0;border-radius:999px;background:var(--c3);flex:none;box-shadow:none;cursor:pointer;transition:background .18s}
+.s-fr-account .sw::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;translate:none;transition:left .18s;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.s-fr-account .sw[aria-checked=true]{background:var(--grad-amber)}
+.s-fr-account .sw[aria-checked=true]::after{left:23px}
+/* loading.tsx: a shimmer bar where each row's words will be */
+.s-fr-account .sk.av{width:56px;height:56px;border-radius:50%;flex:none}
+.s-fr-account .set .lines{flex:1;display:grid;gap:var(--space-2)}
+.s-fr-account .lines .sk{height:16px;width:55%}
+.s-fr-account .lines .sk+.sk{height:12px;width:35%}
+.s-fr-account .legal{margin-top:var(--space-8);color:var(--mute);font-size:.875rem}
+
+.s-fr-account dialog{margin:auto;border:0;padding:var(--space-6);border-radius:var(--r-2xl);background:var(--c1);color:var(--text);box-shadow:inset 0 1px 0 var(--rule),0 0 0 1px var(--hair),0 10px 40px -10px rgba(0,0,0,.8);width:min(440px,calc(100% - 32px))}
+.s-fr-account dialog::backdrop{background:rgba(5,5,7,.6)}
+.s-fr-account dialog h3{font-size:1.375rem;letter-spacing:-.02em}
+.s-fr-account dialog p{color:var(--mute);margin-top:var(--space-2)}
+.s-fr-account dialog [role=alert]{color:var(--rose)}
+.s-fr-account dialog label{display:block;font-weight:500;font-size:.9375rem;margin:var(--space-6) 0 var(--space-2)}
+.s-fr-account dialog input{width:100%;min-height:56px;padding:0 var(--space-4);border:0;border-radius:var(--r-lg);background:var(--c2);box-shadow:inset 0 0 0 1px var(--hair);color:inherit;font:inherit;font-size:1.0625rem}
+.s-fr-account dialog input:focus{outline:none;box-shadow:inset 0 0 0 1.5px var(--acc)}
+.s-fr-account .acts{display:flex;gap:var(--space-3);margin-top:var(--space-6)}
+.s-fr-account .acts>*{flex:1;min-height:48px;border:0;border-radius:var(--r-lg);font:inherit;font-weight:500;cursor:pointer}
+.s-fr-account .acts .ghost{background:color-mix(in srgb,var(--c1) 82%,transparent);color:var(--text);box-shadow:inset 0 1px 0 var(--rule),inset 0 0 0 1px var(--hair)}
+.s-fr-account .acts .dx{background:var(--c1);color:var(--rose);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--rose) 50%,transparent)}
+.s-fr-account .acts .dx:disabled{opacity:.5;cursor:default}
+
+@media (max-width:820px){.s-fr-account .acols{grid-template-columns:1fr;gap:var(--space-8)}}

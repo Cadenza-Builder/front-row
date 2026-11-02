@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { addCourse } from "../addCourse";
 
 const TIPS = [
   ["Start with a course.", "Every lecture you record lands in a course."],
@@ -47,18 +48,11 @@ export function Tour({ first }: { first: string }) {
     if (!value) { setNote("Type the course's name first."); name.current?.focus(); return; }
     setBusy(true);
     setNote("");
-    const res = await fetch("/api/lecture-courses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: value }) }).catch(() => null);
-    const made: { id?: string; name?: string } | null = res?.ok ? await res.json().catch(() => null) : null;
-    if (!made?.id) { setBusy(false); setNote("That did not save. Try again in a moment."); return; }
-    // The syllabus is optional: the course stands even when reading it fails, and it can be added again later.
-    if (file) {
-      const body = new FormData();
-      body.append("file", file);
-      const up = await fetch(`/api/lecture-courses/${made.id}/syllabus`, { method: "POST", body }).catch(() => null);
-      if (!up?.ok) setNote("The syllabus did not upload. You can add it later.");
-    }
-    setCourse({ id: made.id, name: made.name ?? value });
+    const { course: made, note: why } = await addCourse(value, file);
     setBusy(false);
+    setNote(why);
+    if (!made) return;
+    setCourse(made);
     setAt(2);
   }
 
@@ -91,7 +85,7 @@ export function Tour({ first }: { first: string }) {
             <form className="sheet" data-lock onSubmit={next}>
               <label className="fld"><span>Course name</span><input ref={name} className="cz-field" placeholder="ECO220, or Grade 11 Chemistry" maxLength={200} /></label>
               <label className="opt">{UP}<span><b>{file ? file.name : "Add a syllabus (optional)"}</b><br />Fills in your class times and topics. You can add it later.</span>
-                <input type="file" accept=".pdf,.docx" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
+                <input type="file" accept=".pdf,.docx" className="pick" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
             </form>
           </section>
         )}
