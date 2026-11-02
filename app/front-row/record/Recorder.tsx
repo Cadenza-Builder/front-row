@@ -144,10 +144,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     if (changed) boardRead(t);
     if (sample) return;
     const n = r.n, at = Math.floor(t);
-    const [sw, sh] = srcSize(), k = Math.min(1, 1280 / sw), full = document.createElement("canvas");
-    full.width = Math.round(sw * k);
-    full.height = Math.round(sh * k);
-    full.getContext("2d")!.drawImage(r.src!, 0, 0, full.width, full.height);
+    // Full size: the reader crops the board from it (lib/lecture/board.ts), and SAM's boxes carry their own w/h.
+    const [sw, sh] = srcSize(), full = document.createElement("canvas");
+    full.width = sw;
+    full.height = sh;
+    full.getContext("2d")!.drawImage(r.src!, 0, 0);
     const up = new Promise<Blob | null>((res) => full.toBlob(res, "image/jpeg", 0.8)).then(async (jpg) => {
       if (!jpg) return null;
       const { error: err } = await createClient().storage.from("lectures").upload(`${userId}/${r.id}/${n}-${at}.jpg`, jpg, { upsert: true, contentType: "image/jpeg" });
