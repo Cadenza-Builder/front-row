@@ -1,6 +1,6 @@
 // A lecture video into notes, the same path the phone recorder takes. Needs ffmpeg/ffprobe and MODEL_API_KEY:
 //   npx tsx --env-file=.env.local scripts/lecture-run.mts <video.mp4> --course "ECO220" --keywords "a,b,c"
-// (plain `node` cannot load lib/lecture's extensionless imports.) Prints the markdown, writes notes.json here.
+// (plain `node` cannot load lib/lecture's extensionless imports.) Prints the markdown and the Meta calls per model, writes notes.json here.
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,6 +18,21 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: { c
 const video = positionals[0];
 if (!video || !values.course) throw new Error('usage: lecture-run.mts <video.mp4> --course "ECO220" [--keywords "a,b,c"]');
 const keywords = (values.keywords ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+
+// Every Meta API call, counted by model and printed at the end, so a run shows which model did what.
+const calls: Record<string, number> = {};
+const realFetch = globalThis.fetch;
+globalThis.fetch = (input, init) => {
+  const url = input instanceof Request ? input.url : String(input);
+  if (url.startsWith("https://api.meta.ai/")) {
+    let model = new URL(url).pathname;
+    try {
+      model = JSON.parse(String(init?.body)).model ?? model;
+    } catch {} // the transcriber sends audio, not JSON: counted by its path
+    calls[model] = (calls[model] ?? 0) + 1;
+  }
+  return realFetch(input, init);
+};
 
 const dir = await mkdtemp(join(tmpdir(), "lecture-"));
 try {
@@ -58,8 +73,9 @@ try {
   }
 
   const { notes, snaps, markdown } = await finishLecture(segments, values.course, keywords);
-  await writeFile("notes.json", JSON.stringify({ notes, snaps }, null, 2));
+  await writeFile("notes.json", JSON.stringify({ notes, snaps, calls }, null, 2));
   console.log(markdown);
+  console.error("Meta API calls:", calls);
 } finally {
   await rm(dir, { recursive: true, force: true });
 }

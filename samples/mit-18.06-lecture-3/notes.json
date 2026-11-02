@@ -1,0 +1,307 @@
+{
+  "notes": {
+    "title": "Matrix Multiplication: Three Ways to See AB",
+    "summary": "Matrix multiplication $C=AB$ by the row-times-column entry sum, then reinterpreted as A acting on the columns of B and as rows of A acting on B.",
+    "sections": [
+      {
+        "heading": "The standard rule: row times column and compatible shapes",
+        "body": "Let the product be $C = AB$. The entry in row $I$ and column $J$ is written $C_{IJ}$ — row number first, then column number.\n\nFor example, $C_{34}$ comes from row 3 of $A$ and column 4 of $B$:\n\n$C_{34} = (\\text{row 3 of } A) \\cdot (\\text{column 4 of } B)$\n\nIn entries this is $a_{31}b_{14} + a_{32}b_{24} + \\cdots$, continuing across the whole row and down the whole column:\n\n$C_{34} = \\sum_{k=1}^{N} a_{3k}b_{k4}$\n\nwhere $a_{3k}$ is in row 3, column $k$ of $A$ and $b_{k4}$ is in row $k$, column 4 of $B$. This is index practice; most of the course works with whole vectors rather than individual entries.\n\nShapes: think of $A$ as $M \\times N$ — $M$ rows, $N$ columns. For the sum to make sense, the length across must match the length down, so $B$ must have $N$ rows. If $B$ is $N \\times P$, the result $C$ is $M \\times P$. If the matrices are square they must be the same size; if rectangular, the number of columns of $A$ must equal the number of rows of $B$. Every entry of $C$ looks like the sum above. This standard rule is the first of four ways to see the same calculation.",
+        "snaps": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "exam": [],
+        "boxes": [
+          {
+            "kind": "formula",
+            "tex": "C_{34} = \\sum_{k=1}^{N} a_{3k} b_{k4}",
+            "symbols": [
+              {
+                "sym": "C_{34}",
+                "meaning": "entry in row 3, column 4 of the product C"
+              },
+              {
+                "sym": "a_{3k}",
+                "meaning": "entry in row 3, column k of A"
+              },
+              {
+                "sym": "b_{k4}",
+                "meaning": "entry in row k, column 4 of B"
+              },
+              {
+                "sym": "N",
+                "meaning": "number of columns of A, equal to number of rows of B"
+              },
+              {
+                "sym": "k",
+                "meaning": "index running along the row of A and down the column of B"
+              }
+            ]
+          },
+          {
+            "kind": "formula",
+            "tex": "A_{M \\times N} B_{N \\times P} = C_{M \\times P}",
+            "symbols": [
+              {
+                "sym": "A_{M \\times N}",
+                "meaning": "left matrix with M rows and N columns"
+              },
+              {
+                "sym": "B_{N \\times P}",
+                "meaning": "right matrix with N rows and P columns"
+              },
+              {
+                "sym": "C_{M \\times P}",
+                "meaning": "product with M rows and P columns"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Second way: columns — A times each column of B",
+        "body": "Do $AB = C$ again, with $A$ $M \\times N$, $B$ $N \\times P$, $C$ $M \\times P$, but now look at whole columns.\n\nHow to multiply a matrix by a column is already known. $A$ times the first column of $B$ is the first column of the answer; $A$ times the second column is the second column of the answer. Think of the $P$ columns of $B$ sitting side by side and multiply $A$ times each one to get the $P$ columns of $C$.\n\nThis tells us what the columns of $C$ are: they are combinations of the columns of $A$. That is because $A$ times any vector is a combination of the columns of $A$. It fits in size because the columns of $A$ have length $M$ and the columns of $C$ have length $M$. The numbers in a column of $B$ tell what combination to take.",
+        "snaps": [
+          5,
+          6,
+          7,
+          9
+        ],
+        "exam": [],
+        "boxes": [
+          {
+            "kind": "formula",
+            "tex": "A B_{:,j} = C_{:,j}",
+            "symbols": [
+              {
+                "sym": "A",
+                "meaning": "M by N left matrix"
+              },
+              {
+                "sym": "B_{:,j}",
+                "meaning": "j-th column of B"
+              },
+              {
+                "sym": "C_{:,j}",
+                "meaning": "j-th column of the product C"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Third way: rows — each row of A times B",
+        "body": "The third way is to look by rows. A row of $A$ multiplies all of $B$ and produces the corresponding row of the product.\n\nThat row of $C$ is a combination of the rows of $B$, with coefficients coming from that row of $A$. [inaudible]",
+        "snaps": [
+          8,
+          9,
+          10
+        ],
+        "exam": [],
+        "boxes": [
+          {
+            "kind": "formula",
+            "tex": "A_{i,:} B = C_{i,:}",
+            "symbols": [
+              {
+                "sym": "A_{i,:}",
+                "meaning": "i-th row of A"
+              },
+              {
+                "sym": "B",
+                "meaning": "right matrix B"
+              },
+              {
+                "sym": "C_{i,:}",
+                "meaning": "i-th row of the product C"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "words": [
+      {
+        "term": "matrix multiplication",
+        "meaning": "product C = AB where the (i,j) entry is row i of A dotted with column j of B; requires columns of A = rows of B"
+      },
+      {
+        "term": "row times column",
+        "meaning": "entry rule C_{ij} = sum_k a_{ik} b_{kj}"
+      },
+      {
+        "term": "dot product",
+        "meaning": "sum of pairwise products of two vectors of the same length"
+      },
+      {
+        "term": "linear combination",
+        "meaning": "sum of scalar multiples of vectors, where the scalars give the combination"
+      }
+    ],
+    "together": "The entry sum, the column picture, and the row picture are the same calculation: the entry formula adds up products along a row and down a column, collecting those results column-by-column shows each column of C as a combination of columns of A, and collecting row-by-row shows each row of C as a combination of rows of B."
+  },
+  "snaps": [
+    {
+      "t": 0,
+      "url": "boards/0000s.jpg",
+      "board": {
+        "x1": 12,
+        "y1": 76,
+        "x2": 1271,
+        "y2": 574,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "$[\\quad] \\quad [\\quad] \\quad [\\quad]$\n\n$A$",
+      "alt": "Three large empty matrix brackets side by side on chalkboard; leftmost labeled A underneath."
+    },
+    {
+      "t": 60,
+      "url": "boards/0060s.jpg",
+      "board": {
+        "x1": 11,
+        "y1": 54,
+        "x2": 1271,
+        "y2": 606,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "$\\rightarrow$ [unreadable] $]$\n\n$$C_{34}=$$\n\n$$= AB$$",
+      "alt": "Blackboard with arrow and mark on left, large bracket, C sub 3 4 equals center, equals A B bottom left."
+    },
+    {
+      "t": 180,
+      "url": "boards/0180s.jpg",
+      "board": {
+        "x1": 11,
+        "y1": 71,
+        "x2": 1261,
+        "y2": 614,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "$$C_{34} = (\\text{row 3 of A}) \\cdot (\\text{Col. 4 of B})$$\n$$= a_{31}b_{14} + a_{32}b_{24} + [unreadable] a_{3k} [unreadable]$$",
+      "alt": "Chalkboard shows C34 as dot product of row 3 of A and column 4 of B, expanded as a31 b14 plus a32 b24 etc."
+    },
+    {
+      "t": 230,
+      "url": "boards/0230s.jpg",
+      "board": {
+        "x1": 302,
+        "y1": 0,
+        "x2": 1273,
+        "y2": 666,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "[unreadable]\n\n$a_{31}$ $a_{32}$ [unreadable]\n\n$A$",
+      "alt": "Chalkboard showing partial matrix row with a31, a32 and a large A below, mostly obscured by lecturer."
+    },
+    {
+      "t": 330,
+      "url": "boards/0330s.jpg",
+      "board": {
+        "x1": 11,
+        "y1": 74,
+        "x2": 1271,
+        "y2": 482,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "row 3 $\\begin{bmatrix} a_{31} & a_{32} \\end{bmatrix}$ [unreadable]\n\n$\\begin{bmatrix} b_{14} \\\\ b_{24} \\end{bmatrix}$ [unreadable] $=$ $\\begin{bmatrix} C_{34} \\rightarrow \\cdot \\end{bmatrix}$\n\n$A$ $M \\times N$ $B$ $N \\times P$ $C = AB$ $M \\times P$\n\n$C_{34} = (r$ [unreadable]\n\n$= a_{3}$ [unreadable]",
+      "alt": "Blackboard showing row 3 of A times column 4 of B equals entry C34, with sizes M by N, N by P, M by P, and partial formula for C34."
+    },
+    {
+      "t": 380,
+      "url": "boards/0380s.jpg",
+      "board": {
+        "x1": 14,
+        "y1": 0,
+        "x2": 1273,
+        "y2": 717,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "cture 3\n\non (4 wa\n\n$A$ $AB$\n\nfind $A$\n\n$|$ [unreadable] $[ $ [unreadable] $]$\n\n$A$\n\n$m \\times n$ [unreadable]",
+      "alt": "Partial chalkboard with fragmented title text and large matrix brackets labeled A m by n, partly blocked by lecturer."
+    },
+    {
+      "t": 390,
+      "url": "boards/0390s.jpg",
+      "board": {
+        "x1": 11,
+        "y1": 68,
+        "x2": 1271,
+        "y2": 548,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "[unreadable]\n\n$A^{T}$\n\n$$[\\text{[unreadable]}] [\\text{[unreadable]}] = [\\text{[unreadable]}]$$\n\n$A_{m \\times n}$ $n \\times p$ $C_{m \\times p}$",
+      "alt": "Chalkboard showing A times B equals C in brackets with dimensions m by n, n by p, m by p, partly blocked by lecturer."
+    },
+    {
+      "t": 470,
+      "url": "boards/0470s.jpg",
+      "board": {
+        "x1": 14,
+        "y1": 0,
+        "x2": 1273,
+        "y2": 737,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "Algebra Lecture 3\n\n[unreadable]multiplica[unreadable] (4 ways!!)\n\n[unreadable]erse of $AB$ $A^T$\n\n[unreadable]s-Jor[unreadable] $A-1$",
+      "alt": "Chalkboard titled Algebra Lecture 3 on multiplication 4 ways, inverse of AB, A transpose, A-1, partly blocked by lecturer."
+    },
+    {
+      "t": 550,
+      "url": "boards/0550s.jpg",
+      "board": {
+        "x1": 14,
+        "y1": 0,
+        "x2": 1273,
+        "y2": 641,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "[unreadable]old Lecture 3\n\n[unreadable]hplication ([unreadable]s!)\n\n[unreadable] of $A$ [unreadable] $A^T$\n\n[unreadable]ordan / [unreadable]\n\n[unreadable] $A$ [unreadable]\n\n$m \\times n$",
+      "alt": "Chalkboard partly blocked by lecturer, showing fragments on A, A transpose, and m by n matrix A."
+    },
+    {
+      "t": 560,
+      "url": "boards/0560s.jpg",
+      "board": {
+        "x1": 11,
+        "y1": 99,
+        "x2": 1271,
+        "y2": 673,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "$$\\left[ \\text{---} \\right] \\left[ | \\; \\text{col 1} \\right] = \\left[ \\leftarrow A(\\text{col 1}) \\right]$$\n\n$$B \\qquad C$$\n\n$$n \\times p \\qquad m \\times p$$\n\nColu[unreadable]\n\nCol[unreadable]\n\nC[unreadable]",
+      "alt": "Chalkboard shows matrix product with B n by p and C m by p, first columns labeled col 1 and A(col 1), plus partial notes on columns."
+    },
+    {
+      "t": 590,
+      "url": "boards/0590s.jpg",
+      "board": {
+        "x1": 14,
+        "y1": 0,
+        "x2": 1273,
+        "y2": 697,
+        "w": 1280,
+        "h": 960
+      },
+      "markdown": "[unreadable]ultiplicatio (4 ways!)\n\n[unreadable]se of [unreadable] $AB$ $A^T$\n\n[unreadable]",
+      "alt": "Blurry chalkboard with faint white writing about multiplication, partly blocked by lecturer."
+    }
+  ],
+  "calls": {
+    "/v1/asr/transcribe": 6,
+    "sam-3.1": 92,
+    "muse-spark-1.3": 26
+  }
+}
