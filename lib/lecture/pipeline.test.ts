@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Box } from "./locate";
 import type { Snapshot } from "./board";
 import type { Notes } from "./compose";
@@ -195,6 +195,36 @@ describe("finishLecture", () => {
     const out = await finishLecture([{ turns: [], frames: [], snaps: [] }], "C", [], async () => { throw new Error("db down"); });
     expect(out.notes.sections[0].body).toBe("Para one.");
     expect(out.usage).toEqual({ "muse-spark-1.3": { in: 11, out: 21 } });
+  });
+
+  it("finishLecture with no planned topics writes one topic over the whole lecture", async () => {
+    topics = [];
+    const segments = [{ turns: [{ start: 0, end: 5, text: "a" }, { start: 900, end: 905, text: "z" }], frames: [], snaps: [] }];
+    await finishLecture(segments, "C", []);
+    expect(compose).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(compose).mock.calls[0][0].turns.map((t) => t.text)).toEqual(["a", "z"]);
+  });
+
+  it("finishLecture gives speech before, between and after the planned ranges to a topic", async () => {
+    topics = [topic(100, 200), topic(300, 400)];
+    const at = (start: number) => ({ start, end: start + 1, text: `${start}` });
+    await finishLecture([{ turns: [at(10), at(250), at(500)], frames: [], snaps: [] }], "C", []);
+    const sent = vi.mocked(compose).mock.calls.map((c) => c[0].turns.map((t) => t.text));
+    expect(sent).toEqual([["10", "250"], ["500"]]);
+  });
+
+  describe("with a deadline", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("finishLecture skips the clean-up and returns the draft when time is short", async () => {
+      vi.useFakeTimers({ toFake: ["Date"], now: 0 });
+      vi.mocked(compose).mockResolvedValue({ notes: { ...notes, sections: [{ heading: "H", body: "Para one.\n\nPara two.", snaps: [], exam: [] }] }, usage: { "muse-spark-1.3": { in: 0, out: 0 } } });
+      edits = [{ id: "s0.p1", action: "delete", text: "", keptIn: "s0.p0" }];
+      const out = await finishLecture([{ turns: [], frames: [], snaps: [] }], "C", [], undefined, 20_000);
+      expect(vi.mocked(meta().responses.create)).toHaveBeenCalledTimes(1); // the plan only
+      expect(vi.mocked(compose).mock.calls[0][0].timeout).toBe(15_000);
+      expect(out.notes.sections[0].body).toBe("Para one.\n\nPara two.");
+    });
   });
 
   it("finishLecture fails when a writer fails", async () => {

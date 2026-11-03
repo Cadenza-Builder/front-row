@@ -55,17 +55,27 @@ function warn<T>(t: number, step: string, e: unknown, fallback: T): T {
 
 /** All segments of a lecture into notes: plan, one writer per topic in parallel, tidy, `onDraft`, clean-up, tidy.
  * `link` needs time order, so frames and snapshots are sorted; repeated board reads are dropped first. A plan or writer
- * failure throws; a failed clean-up keeps the draft; a failed `onDraft` is logged and ignored. */
-export async function finishLecture(segments: Segment[], course: string, keywords: string[], onDraft?: (notes: Notes) => Promise<void>) {
+ * failure throws; a failed clean-up keeps the draft; a failed `onDraft` is logged and ignored. `deadline` (epoch ms) caps
+ * every call so finish fits the function's limit; undefined is no limit. */
+export async function finishLecture(
+  segments: Segment[],
+  course: string,
+  keywords: string[],
+  onDraft?: (notes: Notes) => Promise<void>,
+  deadline?: number,
+) {
   const byTime = (a: { t: number }, b: { t: number }) => a.t - b.t;
   const turns = joinTurns(segments.map((s) => s.turns));
   const frames = segments.flatMap((s) => s.frames).sort(byTime);
   const snaps = dedupeSnaps(segments.flatMap((s) => s.snaps).sort(byTime));
-  const { plan, usage } = await planTopics({ turns, snaps, course });
+  const { plan, usage } = await planTopics({ turns, snaps, course, deadline });
+  // No speech is lost: the first topic starts at -Infinity, the last ends at Infinity, and a gap goes to the topic before it.
+  const planned = plan.topics.length ? plan.topics : [{ heading: plan.title, start: 0, end: 0, covers: plan.summary }];
+  const topics = planned.map((t, i) => ({ ...t, start: i ? t.start : -Infinity, end: planned[i + 1]?.start ?? Infinity }));
   const written = await Promise.all(
-    plan.topics.map((topic) => writeTopic({ topic, others: plan.topics.filter((o) => o !== topic), turns, frames, snaps, course, keywords })),
+    topics.map((topic) => writeTopic({ topic, others: topics.filter((o) => o !== topic), turns, frames, snaps, course, keywords, deadline })),
   );
-  const owners = written.flatMap((w, i) => w.sections.map(() => plan.topics[i]));
+  const owners = written.flatMap((w, i) => w.sections.map(() => topics[i]));
   const draft = tidy(
     { title: plan.title, summary: plan.summary, together: plan.together || undefined, sections: written.flatMap((w) => w.sections), words: written.flatMap((w) => w.words) },
     turns,
@@ -76,7 +86,7 @@ export async function finishLecture(segments: Segment[], course: string, keyword
   } catch (e) {
     console.warn("lecture: saving the draft failed, going on:", e instanceof Error ? e.message : e);
   }
-  const cleaned = await cleanUp(draft);
+  const cleaned = await cleanUp(draft, deadline);
   const notes = tidy(cleaned.notes, turns, owners);
   // Tokens per model, summed over the plan, every writer and the clean-up.
   for (const u of [...written.map((w) => w.usage), cleaned.usage])

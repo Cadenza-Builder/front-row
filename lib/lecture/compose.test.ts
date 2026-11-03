@@ -218,10 +218,11 @@ describe("compose", () => {
     expect(out.sections.map((s) => s.heading)).toEqual(["B"]);
   });
 
-  it("compose gives the model 120 s, no retry and low reasoning", async () => {
+  it("compose gives the model 60 s (or the timeout passed), no retry and low reasoning", async () => {
     const create = vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([])) } as never);
     await compose({ turns: [], snaps: [], course: "ECO220", keywords: [] });
-    expect(create.mock.calls[0][1]).toEqual({ timeout: 120_000, maxRetries: 0 });
+    await compose({ turns: [], snaps: [], course: "ECO220", keywords: [], timeout: 15_000 });
+    expect(create.mock.calls.map((c) => c[1])).toEqual([{ timeout: 60_000, maxRetries: 0 }, { timeout: 15_000, maxRetries: 0 }]);
     expect(create.mock.calls[0][0]).toMatchObject({ reasoning: { effort: "low" } });
   });
 

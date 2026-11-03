@@ -91,7 +91,7 @@ const PROMPT =
 const s = (t: number) => `${Math.round(t)}s`;
 
 /** The notes, and the tokens they cost per model (what Cadenza's `runs.usage` stores). `part` is appended to the prompt. */
-export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; course: string; keywords: string[]; part?: string }) {
+export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; course: string; keywords: string[]; part?: string; timeout?: number }) {
   const board = input.snaps.map((sn, i) => `### Snapshot ${i} at ${s(sn.t)}\n${sn.markdown}`).join("\n\n") || "(no board)";
   const speech =
     input.turns.map((t) => `[${s(t.start)}-${s(t.end)} snap=${t.snap ?? "none"} pointing=${t.pointing ?? "none"}] ${t.text}`).join("\n") ||
@@ -111,7 +111,7 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
         schema: z.toJSONSchema(Wire, { target: "draft-7" }) as Record<string, unknown>,
       },
     },
-  }, { timeout: 120_000, maxRetries: 0 });
+  }, { timeout: input.timeout ?? 60_000, maxRetries: 0 });
   const notes = Notes.parse(JSON.parse(res.output_text));
   // An invented snapshot index is dropped, never fatal: a lecture with no board must still get notes.
   for (const sec of notes.sections) sec.snaps = sec.snaps.filter((i) => Number.isInteger(i) && i >= 0 && i < input.snaps.length);

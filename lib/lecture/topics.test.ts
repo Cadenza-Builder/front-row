@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import OpenAI from "openai";
 import type { Box } from "./locate";
 import type { Snapshot } from "./board";
@@ -22,6 +22,9 @@ beforeEach(() => {
   vi.restoreAllMocks();
   vi.mocked(compose).mockReset();
 });
+afterEach(() => vi.useRealTimers());
+// A frozen clock at 0, so deadlines are plain milliseconds left.
+const frozen = () => vi.useFakeTimers({ toFake: ["Date"], now: 0 });
 
 describe("tidy math", () => {
   const body = (b: string) => tidy(notesOf([section(b)]), [], [topic(0, 100)]).sections[0].body;
@@ -33,6 +36,8 @@ describe("tidy math", () => {
     ["already $c_{34}$ fine", "already $c_{34}$ fine"],
     ["plain text, no math", "plain text, no math"],
     ["$$x=1$$ stays", "$$x=1$$ stays"],
+    // Review: merging touching inline math must not reach into display math.
+    ["Here $a$ and $$b=1$$ then", "Here $a$ and $$b=1$$ then"],
   ])("tidy wraps loose LaTeX in body %#", (input, want) => expect(body(input)).toBe(want));
 
   // The two cases from env-test.mts.
@@ -87,6 +92,10 @@ describe("guardEdits", () => {
     expect(guardEdits([edit("s0.p1", "delete"), edit("s0.p1", "delete", "s9.p9"), edit("t0", "delete", "t0")], ids)).toEqual([]);
   });
 
+  it("guardEdits refuses a delete kept in a section heading", () => {
+    expect(guardEdits([edit("s0.p1", "delete", "s0")], ids)).toEqual([]);
+  });
+
   it("guardEdits refuses a delete kept in a paragraph that is deleted too", () => {
     const out = guardEdits([edit("s0.p0", "delete", "s0.p1"), edit("s0.p1", "delete", "s0.b0")], ids);
     expect(out.map((e) => e.id)).toEqual(["s0.p1"]);
@@ -116,6 +125,13 @@ describe("writeTopic", () => {
     expect(out.usage).toEqual({ "muse-spark-1.3": { in: 3, out: 4 } });
   });
 
+  it("writeTopic gives compose the time left before the deadline", async () => {
+    frozen();
+    vi.mocked(compose).mockResolvedValue({ notes: notesOf([section("B")]), usage: { "muse-spark-1.3": { in: 0, out: 0 } } });
+    await writeTopic({ topic: topic(0, 100), others: [], turns: [], frames: [], snaps: [], course: "C", keywords: [], deadline: 40_000 });
+    expect(vi.mocked(compose).mock.calls[0][0].timeout).toBe(35_000);
+  });
+
   it("writeTopic retries once when the model times out", async () => {
     vi.mocked(compose)
       .mockRejectedValueOnce(new OpenAI.APIConnectionTimeoutError())
@@ -128,7 +144,7 @@ describe("writeTopic", () => {
 describe("planTopics", () => {
   const plan: Plan = { title: "T", summary: "S", together: "G", topics: [topic(0, 100)] };
 
-  it("planTopics asks with low reasoning and 120 s, and retries once on a 5xx", async () => {
+  it("planTopics asks with low reasoning and 60 s, and retries once on a 5xx", async () => {
     const create = vi.spyOn(meta().responses, "create")
       .mockRejectedValueOnce(new OpenAI.InternalServerError(500, undefined, "down", new Headers()))
       .mockResolvedValueOnce({ output_text: JSON.stringify(plan), usage: { input_tokens: 5, output_tokens: 6 } } as never);
@@ -136,7 +152,22 @@ describe("planTopics", () => {
     expect(out).toEqual({ plan, usage: { "muse-spark-1.3": { in: 5, out: 6 } } });
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[0][0]).toMatchObject({ reasoning: { effort: "low" } });
-    expect(create.mock.calls[0][1]).toEqual({ timeout: 120_000, maxRetries: 0 });
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 60_000, maxRetries: 0 });
+  });
+
+  it("planTopics shortens its timeout to the deadline and skips the retry under 30 s left", async () => {
+    frozen();
+    const create = vi.spyOn(meta().responses, "create").mockRejectedValue(new OpenAI.InternalServerError(500, undefined, "down", new Headers()));
+    await expect(planTopics({ turns: [], snaps: [], course: "C", deadline: 20_000 })).rejects.toThrow();
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 15_000, maxRetries: 0 });
+  });
+
+  it("planTopics throws without a call when 5 s or less are left", async () => {
+    frozen();
+    const create = vi.spyOn(meta().responses, "create");
+    await expect(planTopics({ turns: [], snaps: [], course: "C", deadline: 5_000 })).rejects.toThrow();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("planTopics does not retry a 4xx", async () => {
@@ -162,7 +193,14 @@ describe("cleanUp", () => {
     expect(out.notes.words).toEqual([{ term: "pivot", meaning: "first nonzero in a row" }]);
     expect(out.edits.map((e) => e.id)).toEqual(["s0.p1", "t0"]);
     expect(out.usage).toEqual({ "muse-spark-1.3": { in: 1, out: 2 } });
-    expect(create.mock.calls[0][1]).toEqual({ timeout: 90_000, maxRetries: 0 });
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 60_000, maxRetries: 0 });
+  });
+
+  it("cleanUp returns the draft without a call when under 25 s are left", async () => {
+    frozen();
+    const create = vi.spyOn(meta().responses, "create");
+    expect(await cleanUp(draft, 24_000)).toEqual({ notes: draft, edits: [], usage: {} });
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("cleanUp keeps the draft when the call fails", async () => {

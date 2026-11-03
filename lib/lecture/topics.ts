@@ -22,8 +22,16 @@ const s = (t: number) => `${Math.round(t)}s`;
 // Turns and frames up to 5 s either side of a topic go to its writer, as in the prototype.
 const near = (topic: Topic) => (t: number) => t >= topic.start - 5 && t < topic.end + 5;
 
+// `deadline` is epoch ms (undefined = no limit). A call gets its nominal timeout or the time left minus 5 s, and none at 5 s or less.
+const left = (deadline?: number) => (deadline ?? Infinity) - Date.now();
+const budget = (nominal: number, deadline?: number) => {
+  const t = Math.min(nominal, left(deadline) - 5_000);
+  if (t <= 0) throw new Error("lecture: out of time before the deadline");
+  return t;
+};
 const transient = (e: unknown) => e instanceof OpenAI.APIConnectionTimeoutError || (e instanceof OpenAI.APIError && (e.status ?? 0) >= 500);
-const retryOnce = <T>(f: () => Promise<T>) => f().catch((e) => (transient(e) ? f() : Promise.reject(e)));
+// One retry on a timeout or 5xx, only while at least 30 s remain.
+const retryOnce = <T>(f: () => Promise<T>, deadline?: number) => f().catch((e) => (transient(e) && left(deadline) >= 30_000 ? f() : Promise.reject(e)));
 
 async function ask<T extends z.ZodType>(name: string, schema: T, text: string, timeout: number) {
   const res = await meta().responses.create({
@@ -37,7 +45,7 @@ async function ask<T extends z.ZodType>(name: string, schema: T, text: string, t
 }
 
 /** Topics in teaching order with time ranges, plus the lecture's title, summary and together. */
-export async function planTopics(input: { turns: Turn[]; snaps: Snapshot[]; course: string }) {
+export async function planTopics(input: { turns: Turn[]; snaps: Snapshot[]; course: string; deadline?: number }) {
   const text =
     `Plan the study notes for this lecture (course: ${input.course}). Split it into its topics in teaching order: each topic gets a heading, ` +
     `its start and end in seconds (consecutive, no gaps or overlaps, covering the whole lecture), and "covers": one line on exactly what that ` +
@@ -45,12 +53,12 @@ export async function planTopics(input: { turns: Turn[]; snaps: Snapshot[]; cour
     `About one topic per 5-10 minutes. Also write the lecture's title, a two-sentence summary, and "together": a short synthesis of how the ideas connect. ` +
     `Never claim something is on an exam unless the professor said so. Math as LaTeX in $...$.\n\n` +
     `## Board\n${input.snaps.map((sn) => `[${s(sn.t)}] ${sn.markdown.slice(0, 600)}`).join("\n\n")}\n\n## Transcript\n${input.turns.map((t) => `[${s(t.start)}] ${t.text}`).join("\n")}`;
-  const { out, usage } = await retryOnce(() => ask("plan", Plan, text, 120_000));
+  const { out, usage } = await retryOnce(async () => ask("plan", Plan, text, budget(60_000, input.deadline)), input.deadline);
   return { plan: out, usage };
 }
 
 /** One topic's section(s). Section `snaps` index the lecture's `snaps`, not the topic's. */
-export async function writeTopic(input: { topic: Topic; others: Topic[]; turns: Turn[]; frames: Frame[]; snaps: Snapshot[]; course: string; keywords: string[] }) {
+export async function writeTopic(input: { topic: Topic; others: Topic[]; turns: Turn[]; frames: Frame[]; snaps: Snapshot[]; course: string; keywords: string[]; deadline?: number }) {
   const { topic } = input;
   const inRange = near(topic);
   const mine = input.snaps.flatMap((sn, i) => (inRange(sn.t) ? [i] : []));
@@ -63,12 +71,16 @@ export async function writeTopic(input: { topic: Topic; others: Topic[]; turns: 
     `Keep title, summary and together to a few words each (they are not used). In words, only the terms this section defines. ` +
     `Never claim something is on an exam unless the professor said so. ` +
     `A worked example lives only in its box: the body says in one sentence what it shows, never its steps. No "the professor", "the lecture", "below" or "above".`;
-  const { notes, usage } = await retryOnce(() => compose({ turns, snaps, course: input.course, keywords: input.keywords, part }));
+  const { notes, usage } = await retryOnce(
+    async () => compose({ turns, snaps, course: input.course, keywords: input.keywords, part, timeout: budget(60_000, input.deadline) }),
+    input.deadline,
+  );
   return { sections: notes.sections.map((sec) => ({ ...sec, snaps: sec.snaps.map((i) => mine[i]) })), words: notes.words, usage };
 }
 
-// Two inline formulas touching ("$a$$b$") read as display math in most renderers: merge them into one.
-const mergeTouching = (t: string) => t.replace(/(\$[^$\n]+)\$\$([^$\n]+\$)/g, "$1 $2");
+// Two inline formulas touching ("$a$$b$") read as display math in most renderers: merge them into one, never inside $$...$$.
+const mergeTouching = (t: string) =>
+  t.split(/(\$\$[\s\S]*?\$\$)/).map((p, i) => (i % 2 ? p : p.replace(/(\$[^$\n]+)\$\$([^$\n]+\$)/g, "$1 $2"))).join("");
 // Formula tex and symbols carry no $ of their own (the renderer adds them).
 const unwrap = (t: string) => t.trim().replace(/^\$+|\$+$/g, "");
 const MATH = /(\$\$[\s\S]*?\$\$|\$[^$\n]+\$)/;
@@ -119,13 +131,19 @@ type Edit = z.infer<typeof Edits>["edits"][number];
 
 /** Only paragraph and term edits; a delete must name where its content is kept, and that place must survive. */
 export function guardEdits(edits: Edit[], ids: Set<string>): Edit[] {
-  const ok = edits.filter((e) => /^s\d+\.p\d+$|^t\d+$/.test(e.id) && (e.action === "rewrite" ? e.text.trim() !== "" : ids.has(e.keptIn) && e.keptIn !== e.id));
+  const ok = edits.filter(
+    (e) =>
+      /^s\d+\.p\d+$|^t\d+$/.test(e.id) &&
+      (e.action === "rewrite" ? e.text.trim() !== "" : /^s\d+\.[pb]\d+$|^t\d+$/.test(e.keptIn) && ids.has(e.keptIn) && e.keptIn !== e.id),
+  );
   const deleted = new Set(ok.filter((e) => e.action === "delete").map((e) => e.id));
   return ok.filter((e) => e.action !== "delete" || !deleted.has(e.keptIn));
 }
 
-/** One call over the numbered draft; the model returns edits, code applies the guarded ones. A failure keeps the draft. */
-export async function cleanUp(notes: Notes): Promise<{ notes: Notes; edits: Edit[]; usage: Usage }> {
+/** One call over the numbered draft; the model returns edits, code applies the guarded ones. A failure, or under 25 s
+ * left before `deadline`, keeps the draft. */
+export async function cleanUp(notes: Notes, deadline?: number): Promise<{ notes: Notes; edits: Edit[]; usage: Usage }> {
+  if (left(deadline) < 25_000) return { notes, edits: [], usage: {} };
   try {
     const units: string[] = [];
     notes.sections.forEach((sec, i) => {
@@ -144,7 +162,7 @@ export async function cleanUp(notes: Notes): Promise<{ notes: Notes; edits: Edit
       `4. A matrix or number written in a paragraph that disagrees with its box: rewrite the paragraph to match the box.\n` +
       `Rules: never add a fact; a rewrite keeps the meaning and keeps math in $...$; edit only paragraphs [s..p..] and terms [t..], never boxes; "text" is "" for a delete; "keptIn" is "" for a rewrite. If nothing needs fixing, return no edits.\n\n` +
       units.join("\n\n");
-    const { out, usage } = await ask("edits", Edits, text, 90_000);
+    const { out, usage } = await ask("edits", Edits, text, budget(60_000, deadline));
     const ids = new Set(units.flatMap((u) => u.match(/^(?:## )?\[([^\]]+)\]/)?.[1] ?? []));
     const edits = guardEdits(out.edits, ids);
     const byId = new Map(edits.map((e) => [e.id, e]));
