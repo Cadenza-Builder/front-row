@@ -120,20 +120,20 @@ export function tidy(notes: Notes, turns: Turn[], topics: Topic[]): Notes {
       if (b.kind === "mistake") b.text = fix(b.text);
     }
   });
-  // Terms: one entry per term, and only terms no section already names.
-  const named = n.sections.map((x) => `${x.heading}\n${x.body}`).join("\n").toLowerCase();
-  n.words = [...new Map(n.words.map((w) => [w.term.toLowerCase(), { ...w, meaning: matchEnvs(w.meaning) }])).values()].filter((w) => !named.includes(w.term.toLowerCase()));
+  // Terms: one entry per term. A glossary restates the sections by design, so a section naming a term never drops it.
+  n.words = [...new Map(n.words.map((w) => [w.term.toLowerCase(), { ...w, meaning: matchEnvs(w.meaning) }])).values()];
   return n;
 }
 
 const Edits = z.object({ edits: z.array(z.object({ id: z.string(), action: z.enum(["delete", "rewrite"]), text: z.string(), keptIn: z.string() })) });
 type Edit = z.infer<typeof Edits>["edits"][number];
 
-/** Only paragraph and term edits; a delete must name where its content is kept, and that place must survive. */
+/** Only paragraph and term edits, and a term is deleted only as a repeat of another term; a delete must name where its
+ * content is kept, and that place must survive. */
 export function guardEdits(edits: Edit[], ids: Set<string>): Edit[] {
   const ok = edits.filter(
     (e) =>
-      /^s\d+\.p\d+$|^t\d+$/.test(e.id) &&
+      (/^s\d+\.p\d+$/.test(e.id) || (/^t\d+$/.test(e.id) && (e.action === "rewrite" || /^t\d+$/.test(e.keptIn)))) &&
       (e.action === "rewrite" ? e.text.trim() !== "" : /^s\d+\.[pb]\d+$|^t\d+$/.test(e.keptIn) && ids.has(e.keptIn) && e.keptIn !== e.id),
   );
   const deleted = new Set(ok.filter((e) => e.action === "delete").map((e) => e.id));
@@ -158,7 +158,7 @@ export async function cleanUp(notes: Notes, deadline?: number): Promise<{ notes:
       `1. Repetition: a fact, formula, definition, example or argument stated more than once anywhere. Keep the clearest single statement (for a worked example, keep the box; for a definition, keep the first). A paragraph that retells a worked-example box is rewritten to one sentence on what the example shows. ` +
       `Delete a paragraph only when everything in it is already said elsewhere, and name that place in "keptIn" (the id of the box or earlier paragraph); otherwise rewrite it shorter, keeping every fact, example, number and stressed remark that appears nowhere else. Losing content is worse than a repeat.\n` +
       `2. Seams: a sentence that relies on something not yet shown (a later example, a box, "below", "above", "that example", "the lecture", "the professor") is rewritten to stand on its own.\n` +
-      `3. A Term entry that restates a section is deleted.\n` +
+      `3. Terms are a short glossary and are meant to restate the sections, so never delete a Term because a section says it. Two Terms for the same idea (e.g. "nullspace" and "nullspace N(A)"): delete one, with "keptIn" the other Term.\n` +
       `4. A matrix or number written in a paragraph that disagrees with its box: rewrite the paragraph to match the box.\n` +
       `Rules: never add a fact; a rewrite keeps the meaning and keeps math in $...$; edit only paragraphs [s..p..] and terms [t..], never boxes; "text" is "" for a delete; "keptIn" is "" for a rewrite. If nothing needs fixing, return no edits.\n\n` +
       units.join("\n\n");

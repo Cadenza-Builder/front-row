@@ -71,17 +71,15 @@ describe("tidy filters", () => {
     expect(out.sections.map((s) => s.exam.length)).toEqual([0, 1]);
   });
 
-  it("tidy keeps one entry per term and drops terms a section already names", () => {
+  it("tidy keeps one entry per term, including terms a section defines", () => {
     const words = [{ term: "pivot", meaning: "a" }, { term: "Pivot", meaning: "b" }, { term: "rank", meaning: "c" }];
     const out = tidy(notesOf([section("The rank counts pivots.", { heading: "Rank" })], words), [], [topic(0, 100)]);
-    expect(out.words).toEqual([]);
-    const out2 = tidy(notesOf([section("Row reduction.")], words), [], [topic(0, 100)]);
-    expect(out2.words.map((w) => w.term.toLowerCase())).toEqual(["pivot", "rank"]);
+    expect(out.words.map((w) => w.term.toLowerCase())).toEqual(["pivot", "rank"]);
   });
 });
 
 describe("guardEdits", () => {
-  const ids = new Set(["s0", "s0.p0", "s0.p1", "s0.b0", "t0"]);
+  const ids = new Set(["s0", "s0.p0", "s0.p1", "s0.b0", "t0", "t1"]);
   const edit = (id: string, action: "delete" | "rewrite", keptIn = "", text = "") => ({ id, action, text, keptIn });
 
   it("guardEdits refuses edits to boxes and section headings", () => {
@@ -90,6 +88,10 @@ describe("guardEdits", () => {
 
   it("guardEdits refuses a delete without an existing keptIn, or kept in itself", () => {
     expect(guardEdits([edit("s0.p1", "delete"), edit("s0.p1", "delete", "s9.p9"), edit("t0", "delete", "t0")], ids)).toEqual([]);
+  });
+
+  it("guardEdits deletes a term only as a repeat of another term", () => {
+    expect(guardEdits([edit("t0", "delete", "s0.p0"), edit("t0", "delete", "t1")], ids).map((e) => e.keptIn)).toEqual(["t1"]);
   });
 
   it("guardEdits refuses a delete kept in a section heading", () => {
