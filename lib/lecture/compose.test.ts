@@ -218,10 +218,21 @@ describe("compose", () => {
     expect(out.sections.map((s) => s.heading)).toEqual(["B"]);
   });
 
-  it("compose gives the model 180 s and no retry", async () => {
+  it("compose gives the model 120 s, no retry and low reasoning", async () => {
     const create = vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([])) } as never);
     await compose({ turns: [], snaps: [], course: "ECO220", keywords: [] });
-    expect(create.mock.calls[0][1]).toEqual({ timeout: 180_000, maxRetries: 0 });
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 120_000, maxRetries: 0 });
+    expect(create.mock.calls[0][0]).toMatchObject({ reasoning: { effort: "low" } });
+  });
+
+  it("compose appends the part note after the transcript and asks for exam lines only on exam words", async () => {
+    const create = vi.spyOn(meta().responses, "create").mockResolvedValue({ output_text: JSON.stringify(notes([])) } as never);
+    await compose({ turns: [], snaps: [], course: "ECO220", keywords: [], part: "\n\n## Your part\nOne topic." });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text: string = (create.mock.calls[0][0] as any).input[0].content[0].text;
+    expect(text.endsWith("(no speech captured)\n\n## Your part\nOne topic.")).toBe(true);
+    expect(text).toContain("only when the professor says exam, test, midterm, quiz or final");
+    expect(text).not.toContain("said is important");
   });
 
   it("compose keeps a written together", async () => {

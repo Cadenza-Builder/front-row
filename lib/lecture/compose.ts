@@ -72,7 +72,7 @@ const PROMPT =
   'Use them silently to work out what "this", "here" and "that" mean, then write it into plain sentences ("The residual plot fans out: ..."). ' +
   "Never put timestamps, snap numbers, `pointing`, speaker labels or quote = meaning glosses in `body`. " +
   "List a section's board snapshots by index in `snaps`. " +
-  "Add to `exam` only what the professor said is important or will be on the test: `quote` is a short clean statement of what is examinable " +
+  "Add to `exam` only when the professor says exam, test, midterm, quiz or final: `quote` is a short clean statement of what is examinable " +
   '(e.g. "Spotting heteroskedasticity from a residual plot: on the midterm"), not their words; `t` is that turn\'s start in seconds. ' +
   "Board writing left up all lecture (an outline, a list of terms) is not a topic: use it in the sections that discuss it, never as a section of its own. " +
   'Only when a whole section has no speech, say "no speech captured" once and write it from the board. ' +
@@ -90,17 +90,18 @@ const PROMPT =
 
 const s = (t: number) => `${Math.round(t)}s`;
 
-/** The notes, and the tokens they cost per model (what Cadenza's `runs.usage` stores). */
-export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; course: string; keywords: string[] }) {
+/** The notes, and the tokens they cost per model (what Cadenza's `runs.usage` stores). `part` is appended to the prompt. */
+export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; course: string; keywords: string[]; part?: string }) {
   const board = input.snaps.map((sn, i) => `### Snapshot ${i} at ${s(sn.t)}\n${sn.markdown}`).join("\n\n") || "(no board)";
   const speech =
     input.turns.map((t) => `[${s(t.start)}-${s(t.end)} snap=${t.snap ?? "none"} pointing=${t.pointing ?? "none"}] ${t.text}`).join("\n") ||
     "(no speech captured)";
   const text =
     `${PROMPT}\n\nCourse: ${input.course}\n\nKeywords: ${input.keywords.join(", ") || "(none)"}` +
-    `\n\n## Board\n${board}\n\n## Transcript\n${speech}`;
+    `\n\n## Board\n${board}\n\n## Transcript\n${speech}${input.part ?? ""}`;
   const res = await meta().responses.create({
     model: "muse-spark-1.3",
+    reasoning: { effort: "low" },
     input: [{ type: "message", role: "user", content: [{ type: "input_text", text }] }],
     text: {
       format: {
@@ -110,7 +111,7 @@ export async function compose(input: { turns: LinkedTurn[]; snaps: Snapshot[]; c
         schema: z.toJSONSchema(Wire, { target: "draft-7" }) as Record<string, unknown>,
       },
     },
-  }, { timeout: 180_000, maxRetries: 0 });
+  }, { timeout: 120_000, maxRetries: 0 });
   const notes = Notes.parse(JSON.parse(res.output_text));
   // An invented snapshot index is dropped, never fatal: a lecture with no board must still get notes.
   for (const sec of notes.sections) sec.snaps = sec.snaps.filter((i) => Number.isInteger(i) && i >= 0 && i < input.snaps.length);

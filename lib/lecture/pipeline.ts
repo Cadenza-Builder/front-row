@@ -1,7 +1,7 @@
 import { dedupeSnaps, pickSnapshots, readBoard, type Frame, type Snapshot } from "./board";
-import { compose, toMarkdown } from "./compose";
-import { link } from "./link";
+import { toMarkdown, type Notes } from "./compose";
 import { locate, type BoardKind } from "./locate";
+import { cleanUp, planTopics, tidy, writeTopic } from "./topics";
 import { joinTurns, transcribe, type Turn } from "./transcribe";
 
 type Segment = { turns: Turn[]; frames: Frame[]; snaps: Snapshot[] };
@@ -53,12 +53,33 @@ function warn<T>(t: number, step: string, e: unknown, fallback: T): T {
   return fallback;
 }
 
-/** All segments of a lecture into notes. `link` needs time order, so frames and snapshots are sorted; repeated board reads are dropped first. */
-export async function finishLecture(segments: Segment[], course: string, keywords: string[]) {
+/** All segments of a lecture into notes: plan, one writer per topic in parallel, tidy, `onDraft`, clean-up, tidy.
+ * `link` needs time order, so frames and snapshots are sorted; repeated board reads are dropped first. A plan or writer
+ * failure throws; a failed clean-up keeps the draft; a failed `onDraft` is logged and ignored. */
+export async function finishLecture(segments: Segment[], course: string, keywords: string[], onDraft?: (notes: Notes) => Promise<void>) {
   const byTime = (a: { t: number }, b: { t: number }) => a.t - b.t;
   const turns = joinTurns(segments.map((s) => s.turns));
   const frames = segments.flatMap((s) => s.frames).sort(byTime);
   const snaps = dedupeSnaps(segments.flatMap((s) => s.snaps).sort(byTime));
-  const { notes, usage } = await compose({ turns: link(turns, frames, snaps), snaps, course, keywords });
+  const { plan, usage } = await planTopics({ turns, snaps, course });
+  const written = await Promise.all(
+    plan.topics.map((topic) => writeTopic({ topic, others: plan.topics.filter((o) => o !== topic), turns, frames, snaps, course, keywords })),
+  );
+  const owners = written.flatMap((w, i) => w.sections.map(() => plan.topics[i]));
+  const draft = tidy(
+    { title: plan.title, summary: plan.summary, together: plan.together || undefined, sections: written.flatMap((w) => w.sections), words: written.flatMap((w) => w.words) },
+    turns,
+    owners,
+  );
+  try {
+    await onDraft?.(draft);
+  } catch (e) {
+    console.warn("lecture: saving the draft failed, going on:", e instanceof Error ? e.message : e);
+  }
+  const cleaned = await cleanUp(draft);
+  const notes = tidy(cleaned.notes, turns, owners);
+  // Tokens per model, summed over the plan, every writer and the clean-up.
+  for (const u of [...written.map((w) => w.usage), cleaned.usage])
+    for (const [model, { in: i, out }] of Object.entries(u)) usage[model] = { in: (usage[model]?.in ?? 0) + i, out: (usage[model]?.out ?? 0) + out };
   return { notes, snaps, markdown: toMarkdown(notes), usage };
 }

@@ -36,7 +36,7 @@ It prints the notes as markdown, then `Meta API calls:` with the count per model
 | Speech to text, biased with course vocabulary | `muse-voice-transcribe-1.0` | `lib/lecture/transcribe.ts` |
 | Find the board and the professor in a frame | `sam-3.1` | `lib/lecture/locate.ts` |
 | Read the board (handwriting, math as LaTeX) | `muse-spark-1.3` | `lib/lecture/board.ts` |
-| Write the notes from transcript + board reads | `muse-spark-1.3` | `lib/lecture/compose.ts` |
+| Plan the topics, write each topic, clean up the joins | `muse-spark-1.3` | `lib/lecture/topics.ts`, `lib/lecture/compose.ts` |
 
 The calls go through the `openai` npm package as an HTTP client pointed at `https://api.meta.ai/v1` (`lib/lecture/meta.ts`). No OpenAI model is called anywhere.
 
@@ -47,7 +47,7 @@ The phone records in two-minute parts. Each part is processed while the next one
 1. **Hear.** The part's audio goes to `muse-voice-transcribe-1.0`, with the course's words as keywords so terms like "heteroskedasticity" come out right.
 2. **Watch.** A frame every 10 s. A 32×18 thumbnail check (`changed.ts`) decides whether the board changed. Only changed frames go to `sam-3.1`, which returns the board and the people in front of it. The professor is the tallest person near the board, not a student in the front row.
 3. **Read.** The board is read once the writing settles (the next frame is unchanged), and every 30 s during long writing so an erased board is not lost. The frame is cropped to the board and sent to `muse-spark-1.3` with the transcript nearby, so a smudged symbol can be settled by what was said. Anything it can't read comes back as `[unreadable]`, never a guess.
-4. **Link and write.** Each board read is tied to what was being said at that moment (`link.ts`). `muse-spark-1.3` writes the notes: sections that follow the lecture, formulas boxed, worked examples checked, each section pointing to the board photo it came from.
+4. **Link and write.** Each board read is tied to what was being said at that moment (`link.ts`). After Stop, `muse-spark-1.3` plans the lecture's topics, then writes every topic at once, one call each (`topics.ts`): sections that follow the lecture, formulas boxed, worked examples checked, each section pointing to the board photo it came from. Code tidies the math and drops exam lines the professor never said, and the draft goes on screen. One last call returns edits for repeats and seams between topics; code applies only the safe ones, and a failed clean-up keeps the draft.
 
 One failed call never fails a lecture: a frame that can't be located or read is skipped and logged, and each call has a 45 s limit.
 
@@ -81,6 +81,7 @@ These are estimates, not a bill. The next cut is SAM: on a phone that doesn't mo
 - **Several boards at once:** one board is read per frame; boards are not stitched together. A blank panel can be read for nothing.
 - **Spoken Greek letters:** a low-resolution zeta was heard and read as "j".
 - **Lighting, glare and non-English lectures:** not tested.
+- **Coverage on some lectures:** writing one topic per call is faster, but on MIT 18.06 lecture 10 the blind judges scored it below one long pass (5.83 vs 6.5 of 10); on lecture 3 it scored higher (6.67 vs 5.67).
 
 ## What's here
 
