@@ -1,5 +1,5 @@
 // A lecture video into notes, the same path the phone recorder takes. Needs ffmpeg/ffprobe and MODEL_API_KEY:
-//   npx tsx --env-file=.env.local scripts/lecture-run.mts <video.mp4> --course "ECO220" --keywords "a,b,c"
+//   npx tsx --env-file=.env scripts/lecture-run.mts <video.mp4> --course "ECO220" --keywords "a,b,c"
 // (plain `node` cannot load lib/lecture's extensionless imports.) Prints the markdown and the Meta calls per model, writes notes.json here.
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
