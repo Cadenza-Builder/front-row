@@ -1,7 +1,9 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Box } from "./locate";
 import type { Snapshot } from "./board";
+import type { Notes } from "./compose";
+import { meta } from "./meta";
 import { finishLecture, framesToLocate, processSegment } from "./pipeline";
 
 vi.mock("./transcribe", async (orig) => ({ ...(await orig<typeof import("./transcribe")>()), transcribe: vi.fn() }));
@@ -125,8 +127,27 @@ describe("finishLecture", () => {
   // Distinct text per time by default, so dedupeSnaps keeps them all.
   const snap = (t: number, markdown = t === 10 ? A : `${B} board ${t}`): Snapshot => ({ t, url: "", board, markdown, alt: "" });
   const notes = { title: "T", summary: "S", sections: [], words: [] };
+  const topic = (start: number, end: number) => ({ heading: `T${start}`, start, end, covers: `covers ${start}` });
+  let topics = [topic(0, 1000)];
+  let edits: unknown[] = [];
+  let cleanUpFails = false;
 
-  beforeEach(() => vi.mocked(compose).mockReset().mockResolvedValue({ notes, usage: { "muse-spark-1.3": { in: 0, out: 0 } } }));
+  beforeEach(() => {
+    process.env.MODEL_API_KEY = "test-key";
+    vi.restoreAllMocks();
+    topics = [topic(0, 1000)];
+    edits = [];
+    cleanUpFails = false;
+    vi.mocked(compose).mockReset().mockResolvedValue({ notes, usage: { "muse-spark-1.3": { in: 0, out: 0 } } });
+    // The plan and the clean-up are the two direct Meta calls; compose is mocked above.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.spyOn(meta().responses, "create").mockImplementation((async (body: any) => {
+      if (body.text.format.name === "plan")
+        return { output_text: JSON.stringify({ title: "Plan title", summary: "S", together: "G", topics }), usage: { input_tokens: 10, output_tokens: 20 } };
+      if (cleanUpFails) throw new Error("clean-up down");
+      return { output_text: JSON.stringify({ edits }), usage: { input_tokens: 100, output_tokens: 200 } };
+    }) as never);
+  });
 
   it("finishLecture joins turns across segments", async () => {
     vi.mocked(compose).mockResolvedValue({ notes: { title: "T", summary: "S", sections: [{ heading: "H", body: "B", snaps: [0, 1], exam: [] }], words: [] }, usage: { "muse-spark-1.3": { in: 1, out: 2 } } });
@@ -141,7 +162,74 @@ describe("finishLecture", () => {
     expect(sent.turns.map((t) => [t.text, t.snap])).toEqual([["a", null], ["b", 0], ["c", 1]]);
     expect(out.snaps.map((s) => s.t)).toEqual([10, 130]);
     expect(out.markdown).not.toContain("board 130");
-    expect(out.usage).toEqual({ "muse-spark-1.3": { in: 1, out: 2 } });
+    // Plan + one writer + clean-up.
+    expect(out.usage).toEqual({ "muse-spark-1.3": { in: 111, out: 222 } });
+  });
+
+  it("finishLecture writes one section per topic and keeps each section's board photos linked", async () => {
+    topics = [topic(0, 100), topic(100, 200)];
+    vi.mocked(compose).mockImplementation(async ({ snaps }) => ({
+      notes: { ...notes, sections: [{ heading: `H${snaps[0].t}`, body: "Body text.", snaps: [0], exam: [] }] },
+      usage: { "muse-spark-1.3": { in: 1, out: 1 } },
+    }));
+    const segments = [{ turns: [{ start: 0, end: 60, text: "a" }, { start: 130, end: 150, text: "c" }], frames: [], snaps: [snap(10), snap(130)] }];
+    const out = await finishLecture(segments, "MIT 18.06", []);
+    expect(compose).toHaveBeenCalledTimes(2);
+    expect(out.notes.title).toBe("Plan title");
+    expect(out.notes.sections.map((s) => [s.heading, s.snaps])).toEqual([["H10", [0]], ["H130", [1]]]);
+    expect(out.usage).toEqual({ "muse-spark-1.3": { in: 112, out: 222 } });
+  });
+
+  it("finishLecture hands the draft to onDraft once, before the clean-up edits", async () => {
+    vi.mocked(compose).mockResolvedValue({ notes: { ...notes, sections: [{ heading: "H", body: "Para one.\n\nPara two.", snaps: [], exam: [] }] }, usage: { "muse-spark-1.3": { in: 0, out: 0 } } });
+    edits = [{ id: "s0.p1", action: "delete", text: "", keptIn: "s0.p0" }];
+    const drafts: Notes[] = [];
+    const out = await finishLecture([{ turns: [], frames: [], snaps: [] }], "C", [], async (d) => void drafts.push(d));
+    expect(drafts.map((d) => d.sections[0].body)).toEqual(["Para one.\n\nPara two."]);
+    expect(out.notes.sections[0].body).toBe("Para one.");
+  });
+
+  it("finishLecture keeps the draft when the clean-up fails, and goes on when onDraft fails", async () => {
+    vi.mocked(compose).mockResolvedValue({ notes: { ...notes, sections: [{ heading: "H", body: "Para one.", snaps: [], exam: [] }] }, usage: { "muse-spark-1.3": { in: 1, out: 1 } } });
+    cleanUpFails = true;
+    const out = await finishLecture([{ turns: [], frames: [], snaps: [] }], "C", [], async () => { throw new Error("db down"); });
+    expect(out.notes.sections[0].body).toBe("Para one.");
+    expect(out.usage).toEqual({ "muse-spark-1.3": { in: 11, out: 21 } });
+  });
+
+  it("finishLecture with no planned topics writes one topic over the whole lecture", async () => {
+    topics = [];
+    const segments = [{ turns: [{ start: 0, end: 5, text: "a" }, { start: 900, end: 905, text: "z" }], frames: [], snaps: [] }];
+    await finishLecture(segments, "C", []);
+    expect(compose).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(compose).mock.calls[0][0].turns.map((t) => t.text)).toEqual(["a", "z"]);
+  });
+
+  it("finishLecture gives speech before, between and after the planned ranges to a topic", async () => {
+    topics = [topic(100, 200), topic(300, 400)];
+    const at = (start: number) => ({ start, end: start + 1, text: `${start}` });
+    await finishLecture([{ turns: [at(10), at(250), at(500)], frames: [], snaps: [] }], "C", []);
+    const sent = vi.mocked(compose).mock.calls.map((c) => c[0].turns.map((t) => t.text));
+    expect(sent).toEqual([["10", "250"], ["500"]]);
+  });
+
+  describe("with a deadline", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("finishLecture skips the clean-up and returns the draft when time is short", async () => {
+      vi.useFakeTimers({ toFake: ["Date"], now: 0 });
+      vi.mocked(compose).mockResolvedValue({ notes: { ...notes, sections: [{ heading: "H", body: "Para one.\n\nPara two.", snaps: [], exam: [] }] }, usage: { "muse-spark-1.3": { in: 0, out: 0 } } });
+      edits = [{ id: "s0.p1", action: "delete", text: "", keptIn: "s0.p0" }];
+      const out = await finishLecture([{ turns: [], frames: [], snaps: [] }], "C", [], undefined, 20_000);
+      expect(vi.mocked(meta().responses.create)).toHaveBeenCalledTimes(1); // the plan only
+      expect(vi.mocked(compose).mock.calls[0][0].timeout).toBe(15_000);
+      expect(out.notes.sections[0].body).toBe("Para one.\n\nPara two.");
+    });
+  });
+
+  it("finishLecture fails when a writer fails", async () => {
+    vi.mocked(compose).mockRejectedValue(new Error("writer down"));
+    await expect(finishLecture([{ turns: [], frames: [], snaps: [] }], "C", [])).rejects.toThrow("writer down");
   });
 
   it("finishLecture composes and returns deduped snaps", async () => {
