@@ -5,7 +5,11 @@ import { LectureNotes } from "./LectureNotes";
 
 const router = { refresh: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("@/lib/supabase/browser", () => ({ createClient: () => ({}) }));
+// The lecture's status each poll answers (drafting only).
+const h = vi.hoisted(() => ({ status: [] as string[] }));
+vi.mock("@/lib/supabase/browser", () => ({
+  createClient: () => ({ from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: { status: h.status.shift() ?? "processing" } }) }; return q; } }),
+}));
 // jsdom has no modal dialogs.
 HTMLDialogElement.prototype.showModal = function () { this.open = true; };
 HTMLDialogElement.prototype.close = function () { this.open = false; };
@@ -112,4 +116,21 @@ test("Save Title renames, Delete for Good deletes and goes home", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Delete for Good" }));
   await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/front-row/home"));
   expect(fetch).toHaveBeenLastCalledWith("/api/lectures/l1", { method: "DELETE" });
+});
+
+test("a draft: no rename, delete, Save Notes or Add to Cadenza, says it is tidying, and reloads once the final is saved", async () => {
+  vi.useFakeTimers();
+  h.status = ["processing", "ready"];
+  router.refresh.mockClear();
+  const c = render(<LectureNotes lecture={{ ...SAMPLE, id: "l1", drafting: true }} tab="notes" />).container;
+  expect(screen.queryByRole("button", { name: /rename or delete/ })).toBeNull();
+  expect(screen.queryByText(/Add to Cadenza/)).toBeNull();
+  expect(screen.queryByText("Save Notes")).toBeNull();
+  expect(screen.queryByText(/Download/)).toBeNull();
+  expect(c.textContent).toContain("Tidying up");
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(router.refresh).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(router.refresh).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
 });

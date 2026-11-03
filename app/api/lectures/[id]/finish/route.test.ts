@@ -27,7 +27,7 @@ function setup(lecture: Record<string, unknown> = {}) {
       ],
       lecture_segments: [
         { lecture_id: LEC, user_id: ME, n: 0, status: "done", result: DONE },
-        { lecture_id: LEC, user_id: ME, n: 1, status: "uploaded", result: { frames: [{ t: 130, changed: true }] } },
+        { lecture_id: LEC, user_id: ME, n: 1, status: "uploaded", result: { frames: [{ t: 130, changed: true }], last: true } },
       ],
     },
     [`${ME}/${LEC}/0.wav`, `${ME}/${LEC}/1.wav`, `${ME}/${LEC}/1-130.jpg`],
@@ -52,7 +52,7 @@ test("finish processes the segment not done, titles the lecture from the notes a
   expect(await (await post(LEC)).json()).toEqual({ status: "ready" });
   expect(h.processSegment).toHaveBeenCalledOnce();
   expect(h.processSegment).toHaveBeenCalledWith(expect.objectContaining({ keywords: ["elasticity"] }));
-  expect(h.finishLecture).toHaveBeenCalledWith([DONE, DONE], "ECO101", ["elasticity"]);
+  expect(h.finishLecture).toHaveBeenCalledWith([DONE, DONE], "ECO101", ["elasticity"], expect.any(Function), expect.any(Number));
   expect(db.tables.lectures.find((l) => l.id === LEC)).toMatchObject({ status: "ready", title: "Price elasticity", notes: { title: "Price elasticity" } });
   // The notes go into Cadenza only through Add to Cadenza.
   expect(db.tables.files ?? []).toEqual([]);

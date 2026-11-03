@@ -82,3 +82,40 @@ test("a lecture still recording with nothing uploaded says so instead of waiting
   expect(getByRole("alert").textContent).toBe("Nothing from this lecture reached Front Row.");
   expect(queryByRole("button", { name: "Write Notes" })).toBeNull();
 });
+
+const draft = { title: "Elasticity", summary: "S", sections: [{ heading: "Demand", body: "Price moves quantity.", exam: [] }], words: [] };
+const reveal = async () => { for (let i = 0; i < 40; i++) await act(() => vi.advanceTimersByTimeAsync(300)); };
+
+test("a processing lecture's draft writes in, then opens right away as a draft", async () => {
+  h.answer = Array(20).fill({ ...lec("processing"), notes: draft });
+  const { getByText, getByRole } = render(<Wait id="l1" dir="u/l1" initial={{ ...lec("processing"), notes: draft }} segments={[]} srcs={{}} />);
+  await reveal();
+  expect(getByText("1 · Demand")).toBeTruthy();
+  expect(getByText("Price moves quantity.")).toBeTruthy();
+  expect(getByText("is ready.")).toBeTruthy();
+  expect(getByRole("button", { name: /Open Notes/ })).toBeTruthy();
+});
+
+test("when the final arrives the doc shows it and offers Open Notes", async () => {
+  const final = { ...draft, sections: [{ heading: "Supply", body: "Final text.", exam: [] }] };
+  // The draft is on screen (written in) for a while before the final replaces it.
+  h.answer = [...Array(6).fill({ ...lec("processing"), notes: draft }), { ...lec("ready"), notes: final }];
+  const { getByText, queryByText, getByRole } = render(<Wait id="l1" dir="u/l1" initial={{ ...lec("processing"), notes: draft }} segments={[]} srcs={{}} />);
+  for (let i = 0; i < 34; i++) await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(getByText("Price moves quantity.")).toBeTruthy();
+  await reveal();
+  expect(getByText("Final text.")).toBeTruthy();
+  expect(queryByText("Price moves quantity.")).toBeNull();
+  expect(getByText("are ready.")).toBeTruthy();
+  expect(getByRole("button", { name: /Open Notes/ })).toBeTruthy();
+});
+
+test("a processing lecture with no notes shows the pipeline, no doc", async () => {
+  h.answer = Array(20).fill(lec("processing"));
+  const { container, getByText, queryByRole } = render(<Wait id="l1" dir="u/l1" initial={lec("processing")} segments={[]} srcs={{}} />);
+  await reveal();
+  expect(getByText("Writing your")).toBeTruthy();
+  expect(container.querySelector(".fr-wait.writing")).toBeNull();
+  expect(container.querySelector(".doc")!.children.length).toBe(0);
+  expect(queryByRole("button", { name: /Open Notes/ })).toBeNull();
+});

@@ -18,7 +18,7 @@ const TICKS = 24;
 /**
  * The Wait screen (mockups/front-row/wait.html, take Live Pipeline): the four steps and the three columns, from the
  * lecture row and its segments polled every 2 s (the browser reads its own under RLS). When the lecture is ready the
- * notes write in, and Open Notes goes to Read (the same route, rendered again).
+ * notes write in (a processing lecture's draft too), and Open Notes goes to Read (the same route, rendered again).
  */
 export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string; dir: string; initial: WaitLecture; segments: SegRow[]; srcs: Record<string, string> }) {
   const router = useRouter();
@@ -62,7 +62,9 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
   const some = <T,>(xs: T[]) => xs.slice(0, Math.ceil((xs.length * tick) / TICKS));
 
   // The notes, as the doc writes them in: one element at a time once the columns have filled.
-  const notes = lec.status === "ready" ? (lec.notes as Notes) : null;
+  // While processing, a draft (same shape) may already be saved; the final replaces it when the lecture is ready.
+  const draft = lec.status === "processing" && !!(lec.notes as Notes | null)?.sections?.length;
+  const notes = lec.status === "ready" || draft ? (lec.notes as Notes) : null;
   // "Topic: Point." puts the point in the gradient, as the mockup's heading.
   const title = notes && (/[.!?]$/.test(notes.title) ? notes.title : `${notes.title}.`);
   const cut = title ? title.indexOf(": ") + 1 : 0;
@@ -82,7 +84,9 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
     const t = setTimeout(() => setWrote(wrote + 1), 280);
     return () => clearTimeout(t);
   }, [writing, wrote, doc.length]);
-  const ready = writing && wrote >= doc.length;
+  // Written in: the final, or a draft that opens right away while clean-up runs (Read swaps the final in).
+  const shown = writing && wrote >= doc.length && (lec.status === "ready" || draft);
+  const ready = shown && lec.status === "ready";
   // Each column follows its newest line, as a live log does.
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -90,7 +94,9 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
   }, [wrote, tick, rows]);
 
   const retry = async () => {
-    setLec({ ...lec, status: "processing", error: null });
+    // A failed run's old draft is dropped: the new run writes its own.
+    setLec({ ...lec, status: "processing", error: null, notes: null });
+    setWrote(0);
     await fetch(`/api/lectures/${id}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ segmentCount: Math.max(lec.segment_count, rows.length) }) }).catch(() => null);
   };
 
@@ -124,9 +130,9 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
               <span className="err" role="alert">{lec.error}</span>
               <button type="button" className="cz-btn" onClick={retry}><span className="cz-btn__label">Retry</span></button>
             </>
-          ) : ready ? (
+          ) : shown ? (
             <>
-              <h1><span className="light">Your notes</span> <span className="cz-grad">are ready.</span></h1>
+              <h1>{ready ? <><span className="light">Your notes</span> <span className="cz-grad">are ready.</span></> : <><span className="light">Your draft</span> <span className="cz-grad">is ready.</span></>}</h1>
               <button type="button" className="cz-btn" onClick={() => router.refresh()}><span className="cz-btn__label">Open Notes</span><span className="cz-btn__arrow" aria-hidden="true">→</span></button>
             </>
           ) : (
@@ -137,7 +143,7 @@ export function Wait({ id, dir, initial, segments, srcs: signed }: { id: string;
           {step(0, "Saving the last part", `${Math.round((lec.duration_s ?? lec.segment_count * 120) / 60)} min`)}
           {step(1, "Hearing the lecture", `${p.heard[0]} of ${p.heard[1]} parts`)}
           {step(2, "Reading the board", `${p.read} of ${p.photos.length} photos`)}
-          {step(3, "Writing the notes", notes ? `${notes.sections.length} of ${notes.sections.length} parts` : p.steps[3] ? "Writing" : "Next")}
+          {step(3, "Writing the notes", lec.status === "ready" && notes ? `${notes.sections.length} of ${notes.sections.length} parts` : p.steps[3] ? "Writing" : "Next")}
         </div>
         <div className="grid">
           <section className="col">

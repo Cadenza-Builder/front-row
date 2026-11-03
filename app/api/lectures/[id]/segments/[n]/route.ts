@@ -4,7 +4,7 @@ import { frontRowOpen } from "@/lib/lectures/open";
 import { readJson } from "@/lib/lectures/readJson";
 import { getUser } from "@/lib/supabase/server";
 
-// Transcribing two minutes and reading its boards runs in this request.
+// Transcribing two minutes and reading its boards runs after the reply (after()), inside this limit.
 export const maxDuration = 300;
 
 export async function POST(request: Request, ctx: RouteContext<"/api/lectures/[id]/segments/[n]">) {
