@@ -162,7 +162,8 @@ export async function cleanUp(notes: Notes, deadline?: number): Promise<{ notes:
       `4. A matrix or number written in a paragraph that disagrees with its box: rewrite the paragraph to match the box.\n` +
       `Rules: never add a fact; a rewrite keeps the meaning and keeps math in $...$; edit only paragraphs [s..p..] and terms [t..], never boxes; "text" is "" for a delete; "keptIn" is "" for a rewrite. If nothing needs fixing, return no edits.\n\n` +
       units.join("\n\n");
-    const { out, usage } = await ask("edits", Edits, text, budget(60_000, deadline));
+    // Measured 35-54 s on 50-minute lectures; the deadline still caps it inside the 300 s function.
+    const { out, usage } = await ask("edits", Edits, text, budget(90_000, deadline));
     const ids = new Set(units.flatMap((u) => u.match(/^(?:## )?\[([^\]]+)\]/)?.[1] ?? []));
     const edits = guardEdits(out.edits, ids);
     const byId = new Map(edits.map((e) => [e.id, e]));
