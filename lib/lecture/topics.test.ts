@@ -193,7 +193,7 @@ describe("cleanUp", () => {
     expect(out.notes.words).toEqual([{ term: "pivot", meaning: "first nonzero in a row" }]);
     expect(out.edits.map((e) => e.id)).toEqual(["s0.p1", "t0"]);
     expect(out.usage).toEqual({ "muse-spark-1.3": { in: 1, out: 2 } });
-    expect(create.mock.calls[0][1]).toEqual({ timeout: 60_000, maxRetries: 0 });
+    expect(create.mock.calls[0][1]).toEqual({ timeout: 90_000, maxRetries: 0 });
   });
 
   it("cleanUp returns the draft without a call when under 25 s are left", async () => {
