@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 import { z } from "zod";
 import { refused } from "@/lib/billing/plans";
 import { indexFiles } from "@/lib/companion/search";
@@ -34,7 +35,7 @@ const lastSegment = (l: Lecture) => Math.floor(((Date.now() - Date.parse(l.start
 const Create = z.strictObject({ lectureCourseId: z.uuid(), source: z.enum(["phone", "room"]), consent: z.literal(true).optional() });
 const Rename = z.strictObject({ title: z.string().trim().min(1).max(200) });
 const Link = z.strictObject({ weekId: z.uuid() });
-const Frames = z.strictObject({ frames: z.array(z.strictObject({ t: z.number().min(0).max(MAX_SEGMENTS * SEG), changed: z.boolean() })).max(60) });
+const Frames = z.strictObject({ frames: z.array(z.strictObject({ t: z.number().min(0).max(MAX_SEGMENTS * SEG), changed: z.boolean() })).max(60), last: z.boolean().optional() });
 // A phone frame for the live board outline: a JPEG data URL only (never a URL SAM would fetch), ~640 px wide.
 const Frame = z.strictObject({ frame: z.string().max(400_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/) });
 const Finish = z.strictObject({ segmentCount: z.number().int().min(1).max(MAX_SEGMENTS) });
@@ -139,23 +140,36 @@ export async function saveSegment(supabase: Db, userId: string, id: string, nPar
   if (!parsed.success) return bad("Send the segment's frames.");
   if (lecture.status !== "recording") return { code: 409, body: { error: "This lecture is no longer recording." } };
   const admin = createAdminClient();
-  const { frames } = parsed.data;
+  const { frames, last } = parsed.data;
   // Kept first so finish can process it again if this request dies. Each segment is processed here once: a second send
-  // (a retry, a replay) hits the (lecture_id, n) key and is left to finish, which does the ones not done.
-  const { error } = await admin.from("lecture_segments").insert({ lecture_id: id, user_id: userId, n, status: "uploaded", result: { frames } });
+  // (a retry, a replay) hits the (lecture_id, n) key and is left to finish, which does the ones not done. The segment cut
+  // at Stop is marked `last`: finish, called straight after, processes it rather than waiting for this request.
+  const { error } = await admin.from("lecture_segments").insert({ lecture_id: id, user_id: userId, n, status: "uploaded", result: { frames, last } });
   if (error?.code === "23505") return { code: 202, body: {} };
   if (error) throw error;
-  try {
-    await runSegment(supabase, admin, userId, id, n, frames, (await courseOf(supabase, userId, lecture.lecture_course_id))?.keywords ?? []);
-  } catch (err) {
-    // Not fatal: finish processes every segment that is not done.
-    console.error(`[lectures] segment ${n} of ${id} failed`, err);
-    await admin.from("lecture_segments").update({ status: "failed" }).eq("lecture_id", id).eq("n", n).eq("user_id", userId);
-  }
+  if (last) return { code: 202, body: {} };
+  // After the reply, so the phone's next send (and finish at Stop) never waits on this one's minute of work.
+  after(async () => {
+    try {
+      await runSegment(supabase, admin, userId, id, n, frames, (await courseOf(supabase, userId, lecture.lecture_course_id))?.keywords ?? []);
+    } catch (err) {
+      // Not fatal: finish processes every segment that is not done.
+      console.error(`[lectures] segment ${n} of ${id} failed`, err);
+      // Only while still uploaded: finish may have taken it over and saved it done.
+      await admin.from("lecture_segments").update({ status: "failed" }).eq("lecture_id", id).eq("n", n).eq("user_id", userId).eq("status", "uploaded");
+    }
+  });
   return { code: 202, body: {} };
 }
 
 export async function finish(supabase: Db, userId: string, id: string, input: unknown): Promise<Reply> {
+  // The route's maxDuration is 300 s from the request; 20 s are left for saving the notes and the run row.
+  // shortcut: the last segment (sent with `last`) and any taken over are processed in here and share this budget; a very
+  // slow one can leave too little for the notes and the lecture fails, which Retry recovers. Split if it shows up.
+  const deadline = Date.now() + 280_000;
+  // A segment still processing in its own request is waited for until then, then done here. Segment work measured
+  // 47-60 s healthy and ~115 s on a slow Meta night; 90 s, a redo and the notes still fit the deadline.
+  const takeOver = Date.now() + 90_000;
   const lecture = await load(supabase, userId, id);
   if (!lecture) return NOT_FOUND;
   const parsed = Finish.safeParse(input);
@@ -164,7 +178,8 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
   // Only the request whose update matched goes on: a second finish (or a double tap on Retry) composes nothing. A finish
   // killed mid-way (300 s, a deploy) leaves `processing`; after STALE_MS Retry takes it over.
   const flip = () =>
-    admin.from("lectures").update({ status: "processing", processing_at: new Date().toISOString(), segment_count: parsed.data.segmentCount, error: null }).eq("id", id).eq("user_id", userId);
+    // notes: null so a Retry never shows the failed run's draft again.
+    admin.from("lectures").update({ status: "processing", processing_at: new Date().toISOString(), segment_count: parsed.data.segmentCount, error: null, notes: null }).eq("id", id).eq("user_id", userId);
   let { data: won } = await flip().in("status", ["recording", "failed"]).select("id").throwOnError();
   if (!won?.length) ({ data: won } = await flip().eq("status", "processing").lt("processing_at", new Date(Date.now() - STALE_MS).toISOString()).select("id").throwOnError());
   if (!won?.length) return { code: 200, body: { status: (await load(supabase, userId, id))?.status ?? lecture.status } };
@@ -181,13 +196,17 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
     const { data: rows } = await supabase.from("lecture_segments").select("n, status, result").eq("lecture_id", id).eq("user_id", userId).throwOnError();
     // In parallel, so a finish with many missing segments stays well inside 300 s.
     const found = await Promise.all(
-      Array.from({ length: Math.min(parsed.data.segmentCount, lastSegment(lecture) + 1) }, (_, n) => {
-        const row = rows?.find((r) => r.n === n);
-        if (row?.status === "done") return row.result as unknown as Segment;
+      Array.from({ length: Math.min(parsed.data.segmentCount, lastSegment(lecture) + 1) }, async (_, n) => {
+        let row = rows?.find((r) => r.n === n);
         // No audio uploaded: a gap in the notes, not a failed lecture.
-        if (!names.has(`${n}.wav`)) return null;
-        const frames = (row?.result as { frames?: { t: number; changed: boolean }[] } | null)?.frames ?? [];
-        return runSegment(supabase, admin, userId, id, n, frames, course.keywords);
+        if (row?.status !== "done" && !names.has(`${n}.wav`)) return null;
+        const uploaded = row?.result as { frames?: { t: number; changed: boolean }[]; last?: boolean } | null;
+        while (row?.status === "uploaded" && !uploaded?.last && Date.now() < takeOver) {
+          await new Promise((r) => setTimeout(r, 2000));
+          row = (await supabase.from("lecture_segments").select("n, status, result").eq("lecture_id", id).eq("n", n).eq("user_id", userId).maybeSingle().throwOnError()).data ?? undefined;
+        }
+        if (row?.status === "done") return row.result as unknown as Segment;
+        return runSegment(supabase, admin, userId, id, n, uploaded?.frames ?? [], course.keywords);
       }),
     );
     const segments = found.filter((s) => s !== null);
@@ -195,7 +214,12 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
     if (!segments.some((s) => s.turns.length || s.snaps.length)) throw new Error("Nothing was recorded", { cause: "refused" });
 
     // Front Row records outside Cadenza's weeks: the course's keywords for its terms.
-    const { notes, snaps, usage } = await finishLecture(segments, course.name, course.keywords);
+    // The draft shows on the Wait screen and opens with its photos; only while processing, so a late one never
+    // overwrites ready or failed notes.
+    const onDraft = async (draft: Notes, draftSnaps: Snapshot[]) => {
+      await admin.from("lectures").update({ notes: draft as never, snaps: draftSnaps as never }).eq("id", id).eq("user_id", userId).eq("status", "processing").throwOnError();
+    };
+    const { notes, snaps, usage } = await finishLecture(segments, course.name, course.keywords, onDraft, deadline);
     await admin.from("lectures").update({ status: "ready", title: notes.title.slice(0, 200), notes: notes as never, snaps: snaps as never, error: null }).eq("id", id).eq("user_id", userId).throwOnError();
     await admin.from("runs").update({ status: "done", ...runTokens(usage), finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
     // The audio goes once the notes are saved; the frames stay for the snapshots.

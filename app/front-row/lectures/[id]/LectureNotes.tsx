@@ -28,6 +28,8 @@ export type Lecture = {
   turns: Said[];
   /** The Cadenza week it was added to. */
   linked: { label: string; href: string } | null;
+  /** A draft while clean-up runs: nothing to rename, delete, save or add yet; the page reloads when the final is saved. */
+  drafting?: boolean;
 };
 
 export const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -118,6 +120,19 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // A draft: check every 3 s and reload once, when the final notes are saved.
+  useEffect(() => {
+    if (!L.drafting || !L.id) return;
+    const db = createClient();
+    const t = setInterval(async () => {
+      const { data } = await db.from("lectures").select("status").eq("id", L.id!).maybeSingle();
+      if (data && data.status !== "processing") {
+        clearInterval(t);
+        router.refresh();
+      }
+    }, 3000);
+    return () => clearInterval(t);
+  }, [L.drafting, L.id, router]);
   useLayoutEffect(() => {
     const fit = () => fitPairs(root.current);
     fit();
@@ -191,7 +206,7 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
           <span className="tile"><svg className="ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></span>
           <span><b>{L.course}</b> · Lectures</span>
         </Link>
-        <div className={menu ? "save open" : "save"} ref={save}>
+        {!L.drafting && <div className={menu ? "save open" : "save"} ref={save}>
           <button type="button" className="cz-btn" aria-expanded={menu} onClick={() => setMenu(!menu)}>
             <span className="cz-btn__label">Save Notes</span>
             <span className="cz-btn__arrow" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10" /></svg></span>
@@ -201,7 +216,7 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
             <a href={exp("pdf")}><svg className="ic" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z" /><path d="M14 3v4h4" /></svg>Download PDF<span>Board text and maths included</span></a>
             <a href={exp("docx")}><svg className="ic" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z" /><path d="M14 3v4h4M9 12l1 5 2-4 2 4 1-5" /></svg>Download Word<span>Opens in Google Docs too</span></a>
           </div>
-        </div>
+        </div>}
       </div>
 
       <main className="page" ref={root}>
@@ -209,9 +224,10 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
           <p className="label">{L.label}</p>
           <div className="ttl">
             <h1>{L.number && <><span className="light">{`Lecture ${L.number}`}</span> </>}<span className="cz-grad">{title}</span></h1>
-            <button type="button" className="more" aria-label={`${name}: rename or delete`} onClick={() => (setErr(null), lect.current?.showModal(), field.current?.focus())}>{MORE}</button>
+            {!L.drafting && <button type="button" className="more" aria-label={`${name}: rename or delete`} onClick={() => (setErr(null), lect.current?.showModal(), field.current?.focus())}>{MORE}</button>}
           </div>
           <p className="lead tc-one"><MathText text={notes.summary} /></p>
+          {L.drafting && <p className="hint" role="status">Tidying up. These notes update in a moment.</p>}
         </div>
 
         {tab === "transcript" ? (
@@ -265,11 +281,11 @@ export function LectureNotes({ lecture: L, tab }: { lecture: Lecture; tab: "note
               <section className="part">
                 <div className="part__head"><span className="part__n"><b>✓</b></span><div><h2>Putting It Together</h2></div></div>
                 {notes.together && <p className="hook hook--sum"><MathText text={notes.together} /></p>}
-                <div className="keep">
+                {!L.drafting && <div className="keep">
                   <p className="hint">Keep these notes with your course.</p>
                   <a className="cz-btn cz-btn--ghost" href={exp("pdf")}>Download PDF</a>
                   {add("cz-btn cz-btn--shimmer", <><span className="cz-btn__label">{L.linked ? "Open in Cadenza" : "Add to Cadenza"}</span><span className="cz-btn__arrow" aria-hidden="true">→</span></>)}
-                </div>
+                </div>}
               </section>
             </div>
           </>

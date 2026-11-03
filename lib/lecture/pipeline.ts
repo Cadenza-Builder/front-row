@@ -61,7 +61,7 @@ export async function finishLecture(
   segments: Segment[],
   course: string,
   keywords: string[],
-  onDraft?: (notes: Notes) => Promise<void>,
+  onDraft?: (notes: Notes, snaps: Snapshot[]) => Promise<void>,
   deadline?: number,
 ) {
   const byTime = (a: { t: number }, b: { t: number }) => a.t - b.t;
@@ -82,7 +82,7 @@ export async function finishLecture(
     owners,
   );
   try {
-    await onDraft?.(draft);
+    await onDraft?.(draft, snaps);
   } catch (e) {
     console.warn("lecture: saving the draft failed, going on:", e instanceof Error ? e.message : e);
   }

@@ -33,7 +33,9 @@ export default async function LecturePage({ params, searchParams }: { params: Pr
     return Object.fromEntries(names.flatMap((n, i) => (data?.[i]?.signedUrl ? [[n, data[i].signedUrl]] : [])));
   };
 
-  if (lec.status !== "ready") {
+  // A processing lecture with a draft opens in Read too; Read reloads itself when the final is saved.
+  const drafting = lec.status === "processing" && !!(lec.notes as unknown as Notes | null)?.sections?.length;
+  if (lec.status !== "ready" && !drafting) {
     const initial = { status: lec.status, segment_count: lec.segment_count, duration_s: lec.duration_s, notes: lec.notes, error: lec.error };
     return <Wait id={id} dir={dir} initial={initial} segments={rows} srcs={await sign(progress(lec, rows).photos.map((p) => p.name))} />;
   }
@@ -60,6 +62,7 @@ export default async function LecturePage({ params, searchParams }: { params: Pr
         notes: { ...notes, title: lec.title ?? notes.title },
         shots: snaps.map((s) => ({ t: s.t, src: srcs[s.url] ?? "", board: s.board, alt: s.alt })),
         turns: progress(lec, rows).turns,
+        drafting,
         linked: week && course ? { label: `${course.code || course.name} · Week ${week.number}`, href: `/courses/${week.course_id}/weeks/${week.number}/learn` } : null,
       }}
     />

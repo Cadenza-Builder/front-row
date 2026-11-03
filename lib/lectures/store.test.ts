@@ -2,13 +2,14 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { fakeClient } from "./fakeClient";
 
-const h = vi.hoisted(() => ({ admin: null as unknown, processSegment: vi.fn(), locate: vi.fn() }));
+const h = vi.hoisted(() => ({ admin: null as unknown, processSegment: vi.fn(), finishLecture: vi.fn(), locate: vi.fn(), later: [] as (() => Promise<unknown>)[] }));
+vi.mock("next/server", () => ({ after: (fn: () => Promise<unknown>) => void h.later.push(fn) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.admin }));
-vi.mock("@/lib/lecture/pipeline", async (actual) => ({ ...(await actual<object>()), processSegment: h.processSegment, finishLecture: vi.fn() }));
+vi.mock("@/lib/lecture/pipeline", async (actual) => ({ ...(await actual<object>()), processSegment: h.processSegment, finishLecture: h.finishLecture }));
 vi.mock("@/lib/companion/search", () => ({ indexFiles: vi.fn() }));
 vi.mock("@/lib/lecture/locate", () => ({ locate: h.locate }));
 
-import { createLecture, deleteLecture, findBoard, linkLecture, renameLecture, saveSegment } from "./store";
+import { createLecture, deleteLecture, findBoard, finish, linkLecture, renameLecture, saveSegment } from "./store";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
 const OTHER = "00000000-0000-4000-8000-0000000000b2";
@@ -37,7 +38,11 @@ const use = (db: ReturnType<typeof fakeClient>) => ((h.admin = db.client), db);
 beforeEach(() => {
   h.processSegment.mockReset();
   h.locate.mockReset();
+  h.finishLecture.mockReset();
+  h.later.length = 0;
+  vi.useRealTimers();
 });
+const runLater = async () => { for (const fn of h.later.splice(0)) await fn(); };
 
 test("create without consent returns 409", async () => {
   const db = use(fakeClient(seed()));
@@ -82,6 +87,7 @@ test("a segment is processed from the caller's folder and saved as done, frame u
     snaps: [],
   }));
   expect((await saveSegment(db.client, ME, LEC, "1", { frames: [{ t: 130, changed: true }] })).code).toBe(202);
+  await runLater();
   expect(h.processSegment).toHaveBeenCalledWith(
     expect.objectContaining({ offset: 120, keywords: ["elasticity"], frames: [{ t: 130, changed: true, url: `https://s.test/${ME}/${LEC}/1-130.jpg` }] }),
   );
@@ -183,6 +189,65 @@ test("a segment later than the lecture has been running is refused before any mo
   expect(db.tables.lecture_segments ?? []).toEqual([]);
 });
 
+test("the segment cut at Stop is stored for finish and not processed in its own request", async () => {
+  const db = use(fakeClient(seed(), [`${ME}/${LEC}/1.wav`]));
+  expect((await saveSegment(db.client, ME, LEC, "1", { frames: [{ t: 130, changed: true }], last: true })).code).toBe(202);
+  expect(h.later).toEqual([]);
+  expect(h.processSegment).not.toHaveBeenCalled();
+  // Marked, so finish processes it at once instead of waiting for a request that is not processing it.
+  expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ lecture_id: LEC, user_id: ME, n: 1, status: "uploaded", result: { frames: [{ t: 130, changed: true }], last: true } })]);
+});
+
+test("a segment answers before it is processed: the work runs after the reply", async () => {
+  const db = use(fakeClient(seed(), [`${ME}/${LEC}/1.wav`]));
+  h.processSegment.mockResolvedValue({ turns: [{ t: 120, text: "hi" }], frames: [], snaps: [] });
+  expect((await saveSegment(db.client, ME, LEC, "1", { frames: [] })).code).toBe(202);
+  expect(h.processSegment).not.toHaveBeenCalled();
+  expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ n: 1, status: "uploaded" })]);
+  await runLater();
+  expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ n: 1, status: "done" })]);
+});
+
+test("a segment whose processing fails after the reply is marked failed", async () => {
+  const db = use(fakeClient(seed(), [`${ME}/${LEC}/1.wav`]));
+  h.processSegment.mockRejectedValue(new Error("408"));
+  vi.spyOn(console, "error").mockImplementationOnce(() => {});
+  await saveSegment(db.client, ME, LEC, "1", { frames: [] });
+  await runLater();
+  expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ n: 1, status: "failed" })]);
+});
+
+test("finish saves the draft while processing, and a late draft never overwrites the final notes", async () => {
+  const done = { turns: [{ t: 0, text: "hi" }], frames: [], snaps: [] };
+  const db = use(fakeClient({ ...seed(), lecture_segments: [{ lecture_id: LEC, user_id: ME, n: 0, status: "done", result: done }] }));
+  const lec = () => db.tables.lectures.find((l) => l.id === LEC)!;
+  const DRAFT = { ...NOTES, title: "Draft" };
+  const SNAPS = [{ t: 5, url: "0-5.jpg", board: [], alt: "board" }];
+  let onDraft: (n: unknown, s: unknown) => Promise<void> = async () => {};
+  h.finishLecture.mockImplementation(async (_s: unknown, _c: unknown, _k: unknown, draft: typeof onDraft) => {
+    onDraft = draft;
+    await draft(DRAFT, SNAPS);
+    expect(lec()).toMatchObject({ status: "processing", notes: DRAFT, snaps: SNAPS });
+    return { notes: NOTES, snaps: [], markdown: "", usage: {} };
+  });
+  expect((await finish(db.client, ME, LEC, { segmentCount: 1 })).body).toEqual({ status: "ready" });
+  expect(h.finishLecture).toHaveBeenCalledWith([done], "ECO101", ["elasticity"], expect.any(Function), expect.any(Number));
+  await onDraft(DRAFT, SNAPS);
+  expect(lec()).toMatchObject({ status: "ready", notes: NOTES });
+});
+
+test("Retry of a failed lecture drops the failed run's draft before the new run writes", async () => {
+  const done = { turns: [{ t: 0, text: "hi" }], frames: [], snaps: [] };
+  const db = use(fakeClient({ ...seed(), lecture_segments: [{ lecture_id: LEC, user_id: ME, n: 0, status: "done", result: done }] }));
+  const lec = () => db.tables.lectures.find((l) => l.id === LEC)!;
+  Object.assign(lec(), { status: "failed", notes: { ...NOTES, title: "Old draft" } });
+  h.finishLecture.mockImplementation(async () => {
+    expect(lec()).toMatchObject({ status: "processing", notes: null });
+    return { notes: NOTES, snaps: [], markdown: "", usage: {} };
+  });
+  expect((await finish(db.client, ME, LEC, { segmentCount: 1 })).body).toEqual({ status: "ready" });
+});
+
 const FRAME = { frame: "data:image/jpeg;base64,/9j/AAAA" };
 // A lecture started a minute ago: the seed's is days old, past the six-hour ceiling.
 const live = () => { const db = fakeClient(seed()); h.admin = db.client; db.tables.lectures[0].started_at = new Date(Date.now() - 60_000).toISOString(); return db; };
@@ -218,4 +283,57 @@ test("findBoard refuses a lecture past the six-hour ceiling, so an unfinished le
   db.tables.lectures[0].started_at = new Date(Date.now() - 6 * 3600_000 - 60_000).toISOString();
   expect((await findBoard(db.client, ME, LEC, FRAME)).code).toBe(409);
   expect(h.locate).not.toHaveBeenCalled();
+});
+
+test("a part finish already did is not marked failed when its own late processing throws", async () => {
+  const db = use(fakeClient(seed(), [`${ME}/${LEC}/1.wav`]));
+  h.processSegment.mockRejectedValue(new Error("408"));
+  vi.spyOn(console, "error").mockImplementationOnce(() => {});
+  await saveSegment(db.client, ME, LEC, "1", { frames: [] });
+  Object.assign(db.tables.lecture_segments[0], { status: "done" });
+  await runLater();
+  expect(db.tables.lecture_segments).toEqual([expect.objectContaining({ n: 1, status: "done" })]);
+});
+
+const SEG0 = { turns: [{ t: 0, text: "hi" }], frames: [], snaps: [] };
+const atStop = (row: Record<string, unknown>) => {
+  const db = fakeClient({ ...seed(), lecture_segments: [{ lecture_id: LEC, user_id: ME, n: 0, ...row }] }, [`${ME}/${LEC}/0.wav`]);
+  h.admin = db.client;
+  h.finishLecture.mockImplementation(async (s: unknown) => ({ notes: { ...NOTES, s }, snaps: [], markdown: "", usage: {} }));
+  return db;
+};
+
+test("finish waits for a segment still processing in its own request and uses its result", async () => {
+  vi.useFakeTimers();
+  const db = atStop({ status: "uploaded", result: { frames: [] } });
+  const out = finish(db.client, ME, LEC, { segmentCount: 1 });
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(h.finishLecture).not.toHaveBeenCalled();
+  Object.assign(db.tables.lecture_segments[0], { status: "done", result: SEG0 });
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect((await out).body).toEqual({ status: "ready" });
+  expect(h.processSegment).not.toHaveBeenCalled();
+  expect(h.finishLecture).toHaveBeenCalledWith([SEG0], "ECO101", ["elasticity"], expect.any(Function), expect.any(Number));
+});
+
+test("finish takes over a segment still not done 90 s after it started", async () => {
+  vi.useFakeTimers();
+  const db = atStop({ status: "uploaded", result: { frames: [] } });
+  h.processSegment.mockResolvedValue(SEG0);
+  const out = finish(db.client, ME, LEC, { segmentCount: 1 });
+  await vi.advanceTimersByTimeAsync(88_000);
+  expect(h.processSegment).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(4_000);
+  expect((await out).body).toEqual({ status: "ready" });
+  expect(h.processSegment).toHaveBeenCalledTimes(1);
+});
+
+test("finish processes the segment cut at Stop, and a failed one, straight away", async () => {
+  for (const row of [{ status: "uploaded", result: { frames: [], last: true } }, { status: "failed", result: { frames: [] } }]) {
+    h.processSegment.mockReset().mockResolvedValue(SEG0);
+    const db = atStop(row);
+    // Real timers: any wait here would hold the test past its timeout.
+    expect((await finish(db.client, ME, LEC, { segmentCount: 1 })).body).toEqual({ status: "ready" });
+    expect(h.processSegment).toHaveBeenCalledTimes(1);
+  }
 });

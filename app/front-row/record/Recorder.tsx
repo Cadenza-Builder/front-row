@@ -47,7 +47,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     prof: null as Box | null, shown: null as Box | null, lms: null as Landmark[] | null, lastVideoTime: -1,
     paused: false, stopped: false, t0: 0, pausedFor: 0, pausedAt: 0, reads: 0, nextFrame: 0, tracker: changeTracker(), moved: changeTracker(0.25),
     stream: null as MediaStream | null, ac: null as AudioContext | null, an: null as AnalyserNode | null, wake: null as WakeLockSentinel | null,
-    id: "", chunks: [] as Float32Array[], count: 0, n: 0,
+    id: "", chunks: [] as Float32Array[], count: 0, n: 0, last: -1,
     wavs: new Map<number, Blob>(), frames: new Map<number, Promise<Frame | null>[]>(), jobs: new Map<number, Promise<void>>(), uploaded: new Set<number>(),
     raf: 0, warm: false,
   }).current;
@@ -90,7 +90,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     const frames = (await Promise.all(r.frames.get(n) ?? [])).filter((f) => f !== null);
     const { error: err } = await supabase.storage.from("lectures").upload(`${userId}/${r.id}/${n}.wav`, r.wavs.get(n)!, { upsert: true, contentType: "audio/wav" });
     if (err) throw err;
-    const res = await fetch(`/api/lectures/${r.id}/segments/${n}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ frames }) });
+    const res = await fetch(`/api/lectures/${r.id}/segments/${n}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(n === r.last ? { frames, last: true } : { frames }) });
     if (!res.ok) throw new Error(`segment ${n}: ${res.status}`);
     r.uploaded.add(n);
     r.wavs.delete(n);
@@ -447,7 +447,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     if (sample || !r.id) return (release(), router.push("/front-row/home"));
     if (!r.stopped) {
       r.stopped = true;
-      if (r.count) cut();
+      // The part cut at Stop is only stored by its route (finish processes it), so its POST returns at once.
+      if (r.count) {
+        r.last = r.n;
+        cut();
+      }
       release();
       if (!r.n) {
         // Board photos still uploading land first, so the delete takes them; after it the storage lock refuses any straggler.
