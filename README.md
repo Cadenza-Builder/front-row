@@ -4,7 +4,7 @@ Every AI note-taker listens. Front Row watches.
 
 A phone faces the lecture-hall board. Front Row turns what the professor says and writes into study notes, with the board work in them, minutes after class. It is built for students who can't take their own notes: the ones Accessibility Services would otherwise assign a volunteer note-taker.
 
-**Built during the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).** Every file in this repository was written during the event. Cadenza (studycadenza.com) is a pre-existing private hosted service; Front Row plugs into it, and none of Cadenza's code is here. What Front Row borrows from it is listed under [Pre-existing: Cadenza](#pre-existing-cadenza).
+**Built during the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026).** Every file in this repository was written during the event, except the bundled DejaVu fonts (`lib/lectures/fonts/`, under their own licence in `LICENSE-DejaVu.txt`) used for the PDF export. Cadenza (studycadenza.com) is a pre-existing private hosted service; Front Row plugs into it, and none of Cadenza's code is here. What Front Row borrows from it is listed under [Pre-existing: Cadenza](#pre-existing-cadenza).
 
 ## Try it without a key
 
@@ -19,7 +19,7 @@ No-account demo of the recorder: [studycadenza.com/front-row/sample](https://stu
 
 ## Run it on a lecture
 
-Needs Node 22+, `ffmpeg` on your PATH, and a Meta Model API key.
+Needs Node 22+, `ffmpeg` and `ffprobe` on your PATH, and a Meta Model API key.
 
 ```sh
 cp .env.example .env         # then put your Meta Model API key after MODEL_API_KEY=
@@ -27,7 +27,7 @@ scripts/get-sample.sh        # ten minutes of MIT 18.06 lecture 3 -> sample.mp4
 npm run notes -- sample.mp4 --course "MIT 18.06" --keywords "matrix multiplication,inverse,Gauss-Jordan,row times column,identity matrix"
 ```
 
-It prints the notes as markdown, then `Meta API calls:` with the count per model, and writes `notes.json`. Any lecture video works in place of `sample.mp4`. A ten-minute run takes about 4 to 10 minutes, depending on how fast Meta answers.
+It prints the notes as markdown, then `Meta API calls:` with the count per model (transcription is listed by its path, `/v1/asr/transcribe`), and writes `notes.json`. Any lecture video works in place of `sample.mp4`. A ten-minute run takes about 4 to 10 minutes, depending on how fast Meta answers.
 
 ## Meta models
 
@@ -40,7 +40,7 @@ It prints the notes as markdown, then `Meta API calls:` with the count per model
 
 All four run on Meta's hosted Model API. The calls go through the `openai` npm package as an HTTP client pointed at `https://api.meta.ai/v1` (`lib/lecture/meta.ts`). No OpenAI model is called anywhere.
 
-One model that is not Meta's runs in the phone app only: Google's MediaPipe Pose Landmarker (lite), in the phone's browser (`app/front-row/record/Recorder.tsx`). It draws the professor's outline on screen and skips a board photo while the professor covers more than a third of the board. It sends nothing anywhere. `npm run notes` does not use it.
+One model that is not Meta's runs in the phone app only: Google's MediaPipe Pose Landmarker (lite), in the phone's browser (`app/front-row/record/Recorder.tsx`). It draws the professor's outline on screen and skips a board photo while the professor covers over 35% of the board. It sends nothing anywhere. `npm run notes` does not use it.
 
 ## How it works
 
@@ -54,11 +54,11 @@ The phone records in two-minute parts. Each part is processed in the background 
 Most of that wait is Meta writing the notes, so it varies with how fast Meta answers.
 
 1. **Hear.** The part's audio goes to `muse-voice-transcribe-1.0`, with the course's words as keywords so terms like "heteroskedasticity" come out right.
-2. **Watch.** A frame every 10 s. A 32×18 thumbnail check (`changed.ts`) decides whether the board changed. Only changed frames go to `sam-3.1`, which returns the board and the people in front of it. The professor is the tallest person near the board, not a student in the front row.
+2. **Watch.** A frame every 10 s. A 32×18 thumbnail check (`changed.ts`) decides whether the board changed. Changed frames go to `sam-3.1`, plus the first frame and one at least every 60 s so the professor's position stays fresh. SAM returns the board and the people in front of it. The professor is the person standing at the board (centred within its height, closest to it), not a student seated below. In the phone app, SAM is also asked for the live board outline on screen: at the start, when the phone is moved, every 30 s until a board is found, then every 2 minutes.
 3. **Read.** The board is read once the writing settles (the next frame is unchanged), and every 30 s during long writing so an erased board is not lost. The frame is cropped to the board and sent to `muse-spark-1.3` with the transcript nearby, so a smudged symbol can be settled by what was said. Anything it can't read comes back as `[unreadable]`, never a guess.
 4. **Link and write.** Each board read is tied to what was being said at that moment (`link.ts`). After Stop, `muse-spark-1.3` plans the lecture's topics, then writes every topic at once, one call each (`topics.ts`): sections that follow the lecture, formulas boxed, worked examples checked, each section pointing to the board photo it came from. Code tidies the math and drops exam lines the professor never said, and the draft goes on screen. One last call returns edits for repeats and seams between topics; code applies only the safe ones, and a failed clean-up keeps the draft.
 
-One failed call never fails a lecture: a frame that can't be located or read is skipped and logged. Every call has a time limit: 45 s for a frame, 60 s for each topic, 90 s for the clean-up. After Stop, the whole notes step has to finish inside 280 s.
+One failed call never fails a lecture: a frame that can't be located or read is skipped and logged. Every call has a time limit: 45 s for a frame (transcription and board reads retry once), 60 s for each topic, 90 s for the clean-up. After Stop, the whole notes step has to finish inside 280 s.
 
 ## Cost
 
@@ -80,7 +80,7 @@ These are estimates, not a bill. The next cut is SAM: on a phone that doesn't mo
 |---|---|
 | Accented English (MIT, Oxford, Yale, Stanford, IIT Kharagpur) | 1–5% real word errors; the rest is "uh" and repeats |
 | Full 58-minute lecture | 30 of 30 parts processed, every worked answer correct |
-| Full 47-minute lecture through the phone app, on a night Meta was slow (20+ board-read timeouts) | every part processed, final notes 4:51 after Stop (before the Stop speed-up above) |
+| Full 47-minute lecture through the phone app, on a night Meta was slow (20+ board-read timeouts) | every part processed, final notes 4:51 after Stop (before the Stop speed-up and the 280 s deadline were added) |
 | 6- and 15-minute lectures through the phone app | draft 1:22 and 1:26 after Stop, final 1:56 and 2:06 |
 | A part still processing when Stop is pressed | the notes wait for it and use its result, without doing it twice |
 | Students in front of the board | the professor is picked, not the students |
@@ -128,4 +128,4 @@ Every lecture, photo and note is private to the student who recorded it (row lev
 
 ## Licence
 
-All rights reserved, © 2026 Study Cadenza Inc. You may read, install and run this code to judge the hackathon submission; nothing else is licensed. See [`LICENSE`](LICENSE).
+All rights reserved, © 2026 Study Cadenza Inc. Anyone may read this code, and the hackathon judges may install and run it to evaluate the submission; nothing else is licensed. See [`LICENSE`](LICENSE).
