@@ -78,7 +78,7 @@ These are estimates, not a bill. The next cut is SAM: on a phone that doesn't mo
 
 | Case | Result |
 |---|---|
-| Accented English (MIT, Oxford, Yale, Stanford, IIT Kharagpur) | 1–5% real word errors; the rest is "uh" and repeats |
+| Accented English: six clips (MIT 6.041 and 18.085, Oxford, Yale HIST210, Stanford CS229, IIT Kharagpur), scored against each lecture's human captions | 1–5% real word errors; the rest is "uh" and repeats |
 | Full 58-minute lecture | 30 of 30 parts processed, every worked answer correct |
 | Full 47-minute lecture through the phone app, on a night Meta was slow (20+ board-read timeouts) | every part processed, final notes 4:51 after Stop (before the Stop speed-up and the 280 s deadline were added) |
 | 6- and 15-minute lectures through the phone app | draft 1:22 and 1:26 after Stop, final 1:56 and 2:06 |
@@ -88,7 +88,7 @@ These are estimates, not a bill. The next cut is SAM: on a phone that doesn't mo
 | Meta call stalls | the frame is skipped, the lecture finishes |
 | Long writing without a pause | read every 30 s |
 | Chalkboard (MIT 18.06) | found and read; see [`samples/`](samples/mit-18.06-lecture-3/) |
-| Whiteboard (our own 14-minute recording, Nov 3, the one in the demo video) | notes in two sections plus a summary, linked to 14 board photos |
+| Whiteboard (Oxford calculus, 58 min; our own 14-minute recording, Nov 3, the one in the demo video) | Oxford: see the full-lecture row above. Ours: notes in two sections plus a summary, linked to 14 board photos |
 | Slides on a projector screen (Stanford CS229, lecture 1) | the screen is found; blank slides come back empty, which costs calls but adds nothing wrong to the notes |
 | Messy handwriting | by design, anything the reader can't make out comes back as `[unreadable]` (`board.ts`), never a guess |
 
@@ -98,7 +98,7 @@ Each figure in the demo video, what it rests on, and what it assumes. All of the
 
 | In the video | What it rests on | Assumptions and gaps |
 |---|---|---|
-| A paid note-taker costs about $19 for a two-hour session | The average of published paid note-taker rates at five schools (Exeter, Auckland, Stetson, Tennessee, Towson) | Pay only, without hiring, training or admin. Rates vary by school. |
+| A paid note-taker costs about $19 for a two-hour session | Published paid note-taker rates at five schools, priced for one two-hour session: Exeter £12.71/h (≈ $33), Auckland NZ$23.68/h (≈ $28), Stetson $10–13/h (≈ $23), Tennessee $9.25 per class meeting, Towson $125 per course (≈ $4 a session over about 30). Average ≈ $19.50. | Pay only, without hiring, training or admin. Approximate exchange rates. Some listings date from 2016–2023. Schools that pay by the hour come out above $19; per-class and per-course schools pull the average down. |
 | Front Row costs about $6.60 for two hours | The 47-minute phone-app run ($2.60), scaled to 120 minutes | Meta list prices applied to our call and token counts, not a bill. SAM may cost up to 4× more (Known limits). A board that changes more often costs more. |
 | Notes arrive about a minute and a half after Stop | Draft 1:22 and 1:26 after Stop on 6- and 15-minute lectures; final notes 1:56 and 2:06 | Not yet timed on a two-hour lecture. Parts are processed during recording, so Stop leaves only the last part and the writing, but a longer lecture has more topics to write, so expect the draft later. |
 | "Ninety-nine percent" | Speech to text across five accents: 1–5% real word errors against the lectures' human captions, so 95–99% of words right. 99% is the top of that range. | Only speech was scored as a percentage. Chalkboard, whiteboard, projector and messy writing were run (above) but not scored. |
