@@ -64,8 +64,10 @@ it("sends last: true only on the segment cut at Stop, then asks for the notes", 
   vi.unstubAllGlobals();
 });
 
-it("a board answer with a person shows the Professor box, then it goes back to finding", async () => {
-  const person = { x: 0.5, y: 0.3, w: 0.2, h: 0.5 };
+it.each([
+  [{ x: 0.5, y: 0.3, w: 0.2, h: 0.5 }, "tracking"],
+  [null, "finding"],
+])("person %o: the label reads %s from SAM's answer, and the box goes after PROF_FOR", async (person, label) => {
   const node = () => ({ connect: vi.fn(), fftSize: 0, frequencyBinCount: 0, getByteTimeDomainData: () => {} });
   vi.stubGlobal("AudioContext", class {
     destination = {};
@@ -100,15 +102,16 @@ it("a board answer with a person shows the Professor box, then it goes back to f
   const { container, unmount } = render(<Recorder course="C1" userId="u1" sample={false} />);
   fireEvent.click(screen.getByRole("button", { name: /Start Recording/ }));
   await waitFor(() => expect(container.querySelector("[data-board] b")!.textContent).toBe("in view"));
-  expect(container.querySelector("[data-prof] b")!.textContent).toBe("tracking");
-  expect(container.querySelector("[data-prof]")!.classList.contains("on")).toBe(true);
-  await waitFor(() => expect(fillText).toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number)));
-  // A snapshot, not a track: past PROF_FOR the box and the label go.
+  const prof = () => [container.querySelector("[data-prof] b")!.textContent, container.querySelector("[data-prof]")!.classList.contains("on")];
+  expect(prof()).toEqual([label, !!person]);
+  if (person) await waitFor(() => expect(fillText).toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number)));
+  // A snapshot, not a track: past PROF_FOR the box goes, the label stays on SAM's last answer.
   vi.spyOn(performance, "now").mockReturnValue(performance.now() + 5000);
-  await waitFor(() => expect(container.querySelector("[data-prof] b")!.textContent).toBe("finding"));
+  await new Promise((res) => setTimeout(res, 50));
   fillText.mockClear();
   await new Promise((res) => setTimeout(res, 50));
   expect(fillText).not.toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number));
+  expect(prof()).toEqual([label, !!person]);
   unmount();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();

@@ -2,12 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { after } from "next/server";
 import { z } from "zod";
 import { refused } from "@/lib/billing/plans";
-import { indexFiles } from "@/lib/companion/search";
 import type { Snapshot } from "@/lib/lecture/board";
 import { toMarkdown, type Notes } from "@/lib/lecture/compose";
 import { locate, type Box } from "@/lib/lecture/locate";
 import { finishLecture, processSegment } from "@/lib/lecture/pipeline";
-import { runTokens } from "@/lib/openai/client";
 import { SOMETHING_WRONG } from "@/lib/runs/startRun";
 import { removeFolder } from "@/lib/account/deleteAccount";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -221,7 +219,7 @@ export async function finish(supabase: Db, userId: string, id: string, input: un
     };
     const { notes, snaps, usage } = await finishLecture(segments, course.name, course.keywords, onDraft, deadline);
     await admin.from("lectures").update({ status: "ready", title: notes.title.slice(0, 200), notes: notes as never, snaps: snaps as never, error: null }).eq("id", id).eq("user_id", userId).throwOnError();
-    await admin.from("runs").update({ status: "done", ...runTokens(usage), finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
+    await admin.from("runs").update({ status: "done", usage, tokens: Object.values(usage).reduce((n, m) => n + m.in + m.out, 0), finished_at: new Date().toISOString() }).eq("id", runId).eq("user_id", userId);
     // The audio goes once the notes are saved; the frames stay for the snapshots.
     const wavs = [...names].filter((f) => f.endsWith(".wav")).map((f) => `${dir}/${f}`);
     if (wavs.length) {
@@ -293,7 +291,7 @@ export async function linkLecture(supabase: Db, userId: string, id: string, inpu
     await admin.from("files").delete().eq("id", file.id).eq("user_id", userId);
     return { code: 200, body: { fileId: (await load(supabase, userId, id))?.file_id ?? null } };
   }
-  await indexFiles(admin, [{ id: file.id, user_id: userId, name, text: markdown, topic: week.topic ?? `Week ${week.number}` }]);
+  // Not indexed here (Front Row calls Meta models only): Cadenza indexes unindexed files on the student's first chat question.
   return { code: 200, body: { fileId: file.id } };
 }
 

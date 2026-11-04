@@ -254,7 +254,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     }
     // The Professor box is a snapshot: drawn where SAM saw him, fading over its last half second, then gone.
     const alpha = Math.min(1, (r.profUntil - performance.now()) / 500);
-    if (r.prof && alpha <= 0) setProf(null);
+    if (r.prof && alpha <= 0) r.prof = null; // the box goes; the label keeps SAM's last answer
     if (!r.prof) return;
     const s = r.prof;
     const [px, py] = toScreen(s.x, s.y), [px2, py2] = toScreen(s.x + s.w, s.y + s.h);

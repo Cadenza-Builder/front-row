@@ -6,7 +6,6 @@ const h = vi.hoisted(() => ({ admin: null as unknown, processSegment: vi.fn(), f
 vi.mock("next/server", () => ({ after: (fn: () => Promise<unknown>) => void h.later.push(fn) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.admin }));
 vi.mock("@/lib/lecture/pipeline", async (actual) => ({ ...(await actual<object>()), processSegment: h.processSegment, finishLecture: h.finishLecture }));
-vi.mock("@/lib/companion/search", () => ({ indexFiles: vi.fn() }));
 vi.mock("@/lib/lecture/locate", () => ({ locate: h.locate }));
 
 import { createLecture, deleteLecture, findBoard, finish, linkLecture, renameLecture, saveSegment } from "./store";
