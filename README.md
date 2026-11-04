@@ -42,7 +42,7 @@ All four run on Meta's hosted Model API. The calls go through the `openai` npm p
 
 Every model Front Row calls is Meta's.
 
-**Professor tracking in the demo is for demo purposes only.** The demo video was filmed on Nov 3 with an earlier build that drew the professor's outline live with Google's MediaPipe. Per the organizers' ruling, that was removed on Nov 4. Now the professor box appears only in the no-account sample of the recorder, drawn from SAM 3.1's answer on the sample photo (`app/front-row/record/Recorder.tsx`). A live recording draws no box: SAM 3.1's board check (`lib/lectures/store.ts`) only sets the "Professor tracking / finding" label, because its answer is a few seconds old by the time it arrives.
+**The professor skeleton in the demo video is not in this build.** From 0:31 in the demo video, the outline drawn on the professor comes from an earlier build (filmed Nov 3) that ran Google's MediaPipe in the browser. Per the organizers' ruling that every model must be Meta's, MediaPipe was removed on Nov 4 and is not in this repository. Now the professor box appears only in the recorder's sample mode, drawn from SAM 3.1's answer on the sample photo (`app/front-row/record/Recorder.tsx`). A live recording draws no box: SAM 3.1's board check (`lib/lectures/store.ts`) only sets the "Professor tracking / finding" label, because its answer is a few seconds old by the time it arrives.
 
 ## How it works
 
