@@ -192,8 +192,6 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
   }
   function setProf(p: Box | null) {
     if (r.stopped) return;
-    // Only the still sample photo draws the box: live, SAM's answer is seconds old and the professor has walked on.
-    if (sample) r.prof = p;
     $("[data-prof]").classList.toggle("on", !!p);
     $("[data-prof] b").textContent = p ? "tracking" : "finding";
   }
@@ -253,8 +251,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
       ctx.stroke();
     }
     if (!r.prof) return;
-    const s = r.prof;
-    const [px, py] = toScreen(s.x, s.y), [px2, py2] = toScreen(s.x + s.w, s.y + s.h);
+    const [px, py] = toScreen(r.prof.x, r.prof.y), [px2, py2] = toScreen(r.prof.x + r.prof.w, r.prof.y + r.prof.h);
     box(px - 8, py - 8, px2 - px + 16, py2 - py + 16, "Professor");
   }
 
@@ -344,7 +341,9 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     still.hidden = false;
     await still.decode();
     begin(still);
-    setTimeout(() => (setBoard(SAMPLE_BOARD), setProf(SAMPLE_PROF)), 1500); // as the live camera would: found a moment after the start
+    // As the live camera would: found a moment after the start. Only the still photo draws the Professor box: live,
+    // SAM's answer is seconds old and the professor has walked on.
+    setTimeout(() => (setBoard(SAMPLE_BOARD), setProf(SAMPLE_PROF), (r.prof = SAMPLE_PROF)), 1500);
   }
 
   function togglePause() {

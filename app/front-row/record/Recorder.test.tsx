@@ -64,16 +64,15 @@ it("sends last: true only on the segment cut at Stop, then asks for the notes", 
   vi.unstubAllGlobals();
 });
 
-it.each([
-  [{ x: 0.5, y: 0.3, w: 0.2, h: 0.5 }, "tracking"],
-  [null, "finding"],
-])("live, person %o: the label reads %s from SAM's answer, and no box is drawn (it would be seconds old)", async (person, label) => {
+it("live, the label follows SAM's answers (a no-board answer keeps the last one) and no box is drawn", async () => {
+  let tap!: { onaudioprocess: (e: unknown) => void };
   const node = () => ({ connect: vi.fn(), fftSize: 0, frequencyBinCount: 0, getByteTimeDomainData: () => {} });
   vi.stubGlobal("AudioContext", class {
     destination = {};
+    sampleRate = 16000;
     createMediaStreamSource = node;
     createAnalyser = node;
-    createScriptProcessor = node;
+    createScriptProcessor = () => (tap = { connect: vi.fn() } as never);
     resume = async () => {};
     close = async () => {};
   });
@@ -92,19 +91,27 @@ it.each([
   Object.defineProperty(HTMLVideoElement.prototype, "videoHeight", { get: () => 720, configurable: true });
   Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia: vi.fn().mockResolvedValue({ getVideoTracks: () => [], getTracks: () => [] }) }, configurable: true });
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
-  const board = { x: 0.1, y: 0.1, w: 0.6, h: 0.5 };
+  const board = { x: 0.1, y: 0.1, w: 0.6, h: 0.5 }, person = { x: 0.5, y: 0.3, w: 0.2, h: 0.5 };
+  const answers = [{ board, person }, { board: null, person: null }, { board, person: null }];
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     if (url === "/api/lectures") return new Response(JSON.stringify({ id: "L1", number: 1 }), { status: 201 });
-    if (url === "/api/lectures/L1/board") return new Response(JSON.stringify({ board, person }));
-    return new Response(JSON.stringify({ courses: [] }));
+    if (url === "/api/lectures/L1/board") return new Response(JSON.stringify(answers.shift()));
+    return new Response(JSON.stringify({ courses: [] }), { status: 202 });
   }));
 
   const { container, unmount } = render(<Recorder course="C1" userId="u1" sample={false} />);
   fireEvent.click(screen.getByRole("button", { name: /Start Recording/ }));
-  await waitFor(() => expect(container.querySelector("[data-board] b")!.textContent).toBe("in view"));
-  const prof = () => [container.querySelector("[data-prof] b")!.textContent, container.querySelector("[data-prof]")!.classList.contains("on")];
-  expect(prof()).toEqual([label, !!person]);
-  await new Promise((res) => setTimeout(res, 100)); // several frames drawn
+  const label = () => container.querySelector("[data-prof] b")!.textContent;
+  // The ask at the start, then one per push: 121 s of audio passes RECHECK.
+  const next = () => tap.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(121 * 16000) } });
+  await waitFor(() => expect(label()).toBe("tracking"));
+  expect(container.querySelector("[data-prof]")!.classList.contains("on")).toBe(true);
+  next();
+  await waitFor(() => expect(answers).toHaveLength(1)); // the no-board answer landed
+  await new Promise((res) => setTimeout(res, 50));
+  expect(label()).toBe("tracking");
+  next();
+  await waitFor(() => expect(label()).toBe("finding"));
   expect(fillText).not.toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number));
   unmount();
   vi.restoreAllMocks();

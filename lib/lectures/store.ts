@@ -274,7 +274,7 @@ export async function linkLecture(supabase: Db, userId: string, id: string, inpu
   if (!found.notes) return { code: 409, body: { error: "These notes are not ready yet." } };
   const { lecture } = found;
   if (lecture.file_id) return { code: 200, body: { fileId: lecture.file_id } };
-  const week = (await supabase.from("weeks").select("id, course_id, number, topic").eq("id", parsed.data.weekId).maybeSingle().throwOnError()).data;
+  const week = (await supabase.from("weeks").select("id, course_id").eq("id", parsed.data.weekId).maybeSingle().throwOnError()).data;
   if (!week) return { code: 404, body: { error: "Week not found." } };
   const admin = createAdminClient();
   const markdown = toMarkdown(found.notes);
