@@ -17,7 +17,6 @@ const MISS_WAIT = 30; // seconds between asks while no board has been found, so 
 const RECHECK = 120; // seconds between asks once found: a small knock to the phone moves the picture less than r.moved notices
 const SAMPLE_BOARD: Box = { x: 0, y: 68 / 854, w: 1010 / 1280, h: 508 / 854 }; // SAM 3.1's box on the sample photo (lib/lecture/fixtures/sam-board.txt)
 const SAMPLE_PROF: Box = { x: 658 / 1280, y: 241 / 854, w: 315 / 1280, h: 434 / 854 }; // SAM 3.1's person the server picks on it (lib/lecture/fixtures/sam-person.txt, box 4)
-const PROF_FOR = 4000; // ms a Professor box stays up: it is a snapshot from the last board check, not a live track
 const BONE = "#f5f2ea";
 const ease = (a: Box, b: Box, k: number): Box => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
 
@@ -39,7 +38,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
   // Everything the frame loop and the audio tap touch lives here, not in state: they run 60 times a second.
   const r = useRef({
     src: null as HTMLVideoElement | HTMLImageElement | null, board: null as Box | null, seen: null as Box | null, readAt: -Infinity, askAt: 0, asking: false,
-    prof: null as Box | null, profUntil: 0,
+    prof: null as Box | null,
     paused: false, stopped: false, t0: 0, pausedFor: 0, pausedAt: 0, reads: 0, nextFrame: 0, tracker: changeTracker(), moved: changeTracker(0.25),
     stream: null as MediaStream | null, ac: null as AudioContext | null, an: null as AnalyserNode | null, wake: null as WakeLockSentinel | null,
     id: "", chunks: [] as Float32Array[], count: 0, n: 0, last: -1,
@@ -171,7 +170,8 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
       .then((out: { board: Box | null; person?: Box | null } | null) => {
         // No board this time (the professor in front of it, the lights down) keeps the one already found.
         if (out?.board || (out && !r.board)) setBoard(out.board);
-        if (out) setProf(out.person ?? null); // a server without person yet: no box
+        // No board means SAM picked no professor either (locate.ts): the last answer stands, as the board's does.
+        if (out?.board) setProf(out.person ?? null);
       })
       .catch((e) => console.warn("board", e))
       .finally(() => (r.asking = false));
@@ -190,10 +190,10 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     $("[data-board]").classList.toggle("on", !!b);
     $("[data-board] b").textContent = b ? "in view" : "finding";
   }
-  function setProf(p: Box | null, ms = PROF_FOR) {
+  function setProf(p: Box | null) {
     if (r.stopped) return;
-    r.prof = p;
-    r.profUntil = performance.now() + ms;
+    // Only the still sample photo draws the box: live, SAM's answer is seconds old and the professor has walked on.
+    if (sample) r.prof = p;
     $("[data-prof]").classList.toggle("on", !!p);
     $("[data-prof] b").textContent = p ? "tracking" : "finding";
   }
@@ -252,15 +252,10 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
       ctx.fill();
       ctx.stroke();
     }
-    // The Professor box is a snapshot: drawn where SAM saw him, fading over its last half second, then gone.
-    const alpha = Math.min(1, (r.profUntil - performance.now()) / 500);
-    if (r.prof && alpha <= 0) r.prof = null; // the box goes; the label keeps SAM's last answer
     if (!r.prof) return;
     const s = r.prof;
     const [px, py] = toScreen(s.x, s.y), [px2, py2] = toScreen(s.x + s.w, s.y + s.h);
-    ctx.globalAlpha = alpha;
     box(px - 8, py - 8, px2 - px + 16, py2 - py + 16, "Professor");
-    ctx.globalAlpha = 1;
   }
 
   function meter() {
@@ -349,7 +344,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     still.hidden = false;
     await still.decode();
     begin(still);
-    setTimeout(() => (setBoard(SAMPLE_BOARD), setProf(SAMPLE_PROF, Infinity)), 1500); // as the live camera would: found a moment after the start; the still photo never goes stale
+    setTimeout(() => (setBoard(SAMPLE_BOARD), setProf(SAMPLE_PROF)), 1500); // as the live camera would: found a moment after the start
   }
 
   function togglePause() {

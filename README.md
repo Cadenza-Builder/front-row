@@ -40,9 +40,9 @@ It prints the notes as markdown, then `Meta API calls:` with the count per model
 
 All four run on Meta's hosted Model API. The calls go through the `openai` npm package as an HTTP client pointed at `https://api.meta.ai/v1` (`lib/lecture/meta.ts`). No OpenAI model is called anywhere.
 
-Every model Front Row calls is Meta's. In the phone app, the professor's box on screen is SAM 3.1's answer to the board check (`lib/lectures/store.ts`).
+Every model Front Row calls is Meta's.
 
-The demo video was filmed on Nov 3 with an earlier build that drew the professor's outline with Google's MediaPipe. Per the organizers' ruling it was replaced on Nov 4 with SAM 3.1's professor box.
+**Professor tracking in the demo is for demo purposes only.** The demo video was filmed on Nov 3 with an earlier build that drew the professor's outline live with Google's MediaPipe. Per the organizers' ruling, that was removed on Nov 4. Now the professor box appears only in the no-account sample of the recorder, drawn from SAM 3.1's answer on the sample photo (`app/front-row/record/Recorder.tsx`). A live recording draws no box: SAM 3.1's board check (`lib/lectures/store.ts`) only sets the "Professor tracking / finding" label, because its answer is a few seconds old by the time it arrives.
 
 ## How it works
 

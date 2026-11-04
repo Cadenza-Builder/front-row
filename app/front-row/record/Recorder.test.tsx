@@ -67,7 +67,7 @@ it("sends last: true only on the segment cut at Stop, then asks for the notes", 
 it.each([
   [{ x: 0.5, y: 0.3, w: 0.2, h: 0.5 }, "tracking"],
   [null, "finding"],
-])("person %o: the label reads %s from SAM's answer, and the box goes after PROF_FOR", async (person, label) => {
+])("live, person %o: the label reads %s from SAM's answer, and no box is drawn (it would be seconds old)", async (person, label) => {
   const node = () => ({ connect: vi.fn(), fftSize: 0, frequencyBinCount: 0, getByteTimeDomainData: () => {} });
   vi.stubGlobal("AudioContext", class {
     destination = {};
@@ -104,14 +104,29 @@ it.each([
   await waitFor(() => expect(container.querySelector("[data-board] b")!.textContent).toBe("in view"));
   const prof = () => [container.querySelector("[data-prof] b")!.textContent, container.querySelector("[data-prof]")!.classList.contains("on")];
   expect(prof()).toEqual([label, !!person]);
-  if (person) await waitFor(() => expect(fillText).toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number)));
-  // A snapshot, not a track: past PROF_FOR the box goes, the label stays on SAM's last answer.
-  vi.spyOn(performance, "now").mockReturnValue(performance.now() + 5000);
-  await new Promise((res) => setTimeout(res, 50));
-  fillText.mockClear();
-  await new Promise((res) => setTimeout(res, 50));
+  await new Promise((res) => setTimeout(res, 100)); // several frames drawn
   expect(fillText).not.toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number));
-  expect(prof()).toEqual([label, !!person]);
+  unmount();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("the sample photo draws SAM's Professor box, for the demo", async () => {
+  vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
+  const fillText = vi.fn();
+  const ctx = new Proxy({ fillText, measureText: () => ({ width: 0 }), getImageData: () => ({ data: new Uint8ClampedArray(32 * 18 * 4) }) } as Record<string, unknown>, {
+    get: (t, k) => (k in t ? t[k as string] : () => {}),
+    set: () => true,
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as never);
+  Object.defineProperty(HTMLImageElement.prototype, "decode", { value: async () => {}, configurable: true });
+  Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", { get: () => 1280, configurable: true });
+  Object.defineProperty(HTMLImageElement.prototype, "naturalHeight", { get: () => 854, configurable: true });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ courses: [] }))));
+
+  const { container, unmount } = render(<Recorder course={null} userId={null} sample />);
+  await waitFor(() => expect(fillText).toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number)), { timeout: 3000 });
+  expect(container.querySelector("[data-prof] b")!.textContent).toBe("tracking");
   unmount();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
