@@ -5,15 +5,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { changeTracker } from "@/lib/lecture/changed";
 import { createClient } from "@/lib/supabase/browser";
-import { type Box, downsample, encodeWav, missingSegments, overlap, pickProfessor, startLecture } from "./media";
+import { type Box, downsample, encodeWav, missingSegments, overlap, startLecture } from "./media";
 
-type Landmark = { x: number; y: number; visibility?: number };
-type Pose = { detect(img: HTMLImageElement): { landmarks: Landmark[][] }; detectForVideo(v: HTMLVideoElement, ms: number): { landmarks: Landmark[][] }; close(): void };
 type Frame = { t: number; changed: boolean };
 
-// MediaPipe from its CDN at a pinned version (as in the mockup), so no new npm dependency: the wasm and model load from there anyway.
-const VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
-const MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 const SEG = 120; // seconds per segment, as lib/lectures/store.ts expects
 const RATE = 16000;
 const FRAME_EVERY = 10;
@@ -21,10 +16,9 @@ const FULL: Box = { x: 0, y: 0, w: 1, h: 1 }; // no board found yet: the whole f
 const MISS_WAIT = 30; // seconds between asks while no board has been found, so a phone facing a wall costs little
 const RECHECK = 120; // seconds between asks once found: a small knock to the phone moves the picture less than r.moved notices
 const SAMPLE_BOARD: Box = { x: 0, y: 68 / 854, w: 1010 / 1280, h: 508 / 854 }; // SAM 3.1's box on the sample photo (lib/lecture/fixtures/sam-board.txt)
-const AMBER = "#f59e0b", BONE = "#f5f2ea";
+const SAMPLE_PROF: Box = { x: 658 / 1280, y: 241 / 854, w: 315 / 1280, h: 434 / 854 }; // SAM 3.1's person the server picks on it (lib/lecture/fixtures/sam-person.txt, box 4)
+const BONE = "#f5f2ea";
 const ease = (a: Box, b: Box, k: number): Box => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
-const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28], [0, 11], [0, 12]];
-const seen = (l: Landmark) => (l.visibility ?? 1) > 0.5;
 
 const mmss = (s: number) => `${String((s / 60) | 0).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -43,13 +37,13 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
   const [now] = useState(() => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: false }));
   // Everything the frame loop and the audio tap touch lives here, not in state: they run 60 times a second.
   const r = useRef({
-    src: null as HTMLVideoElement | HTMLImageElement | null, pose: null as Pose | null, board: null as Box | null, seen: null as Box | null, readAt: -Infinity, askAt: 0, asking: false,
-    prof: null as Box | null, shown: null as Box | null, lms: null as Landmark[] | null, lastVideoTime: -1,
+    src: null as HTMLVideoElement | HTMLImageElement | null, board: null as Box | null, seen: null as Box | null, readAt: -Infinity, askAt: 0, asking: false,
+    prof: null as Box | null,
     paused: false, stopped: false, t0: 0, pausedFor: 0, pausedAt: 0, reads: 0, nextFrame: 0, tracker: changeTracker(), moved: changeTracker(0.25),
     stream: null as MediaStream | null, ac: null as AudioContext | null, an: null as AnalyserNode | null, wake: null as WakeLockSentinel | null,
     id: "", chunks: [] as Float32Array[], count: 0, n: 0, last: -1,
     wavs: new Map<number, Blob>(), frames: new Map<number, Promise<Frame | null>[]>(), jobs: new Map<number, Promise<void>>(), uploaded: new Set<number>(),
-    raf: 0, warm: false,
+    raf: 0,
   }).current;
   const $ = (s: string) => root.current!.querySelector(s) as HTMLElement;
 
@@ -133,13 +127,12 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     tap.connect(ac.destination); // a tap that is not connected never runs; it outputs silence
   }
 
-  // Every 10 s: a board frame, unless the professor covers over 35% of the board. changed.ts decides whether it is a new board.
+  // Every 10 s: a board frame. changed.ts decides whether it is a new board.
   function boardFrame() {
     const t = sample ? elapsed() : audioTime();
     if (t < r.nextFrame) return;
     r.nextFrame = Math.floor(t / FRAME_EVERY) * FRAME_EVERY + FRAME_EVERY;
     if (!sample) findBoard(t);
-    if (r.prof && overlap(r.prof, r.board ?? FULL) > 0.35) return;
     const changed = r.tracker(grey());
     if (changed) boardRead(t);
     if (sample) return;
@@ -174,9 +167,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
         if (res.status === 409) r.askAt = Infinity; // the lecture is no longer recording: stop asking
         return res.ok ? res.json() : null;
       })
-      .then((out: { board: Box | null } | null) => {
+      .then((out: { board: Box | null; person?: Box | null } | null) => {
         // No board this time (the professor in front of it, the lights down) keeps the one already found.
         if (out?.board || (out && !r.board)) setBoard(out.board);
+        // No board means SAM picked no professor either (locate.ts): the last answer stands, as the board's does.
+        if (out?.board) setProf(out.person ?? null);
       })
       .catch((e) => console.warn("board", e))
       .finally(() => (r.asking = false));
@@ -194,6 +189,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     if (!b) r.seen = null;
     $("[data-board]").classList.toggle("on", !!b);
     $("[data-board] b").textContent = b ? "in view" : "finding";
+  }
+  function setProf(p: Box | null) {
+    if (r.stopped) return;
+    $("[data-prof]").classList.toggle("on", !!p);
+    $("[data-prof] b").textContent = p ? "tracking" : "finding";
   }
   function boardRead(t: number) {
     r.readAt = performance.now();
@@ -251,51 +251,8 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
       ctx.stroke();
     }
     if (!r.prof) return;
-    const s = (r.shown = r.shown ? ease(r.shown, r.prof, 0.25) : r.prof);
-    const [px, py] = toScreen(s.x, s.y), [px2, py2] = toScreen(s.x + s.w, s.y + s.h);
+    const [px, py] = toScreen(r.prof.x, r.prof.y), [px2, py2] = toScreen(r.prof.x + r.prof.w, r.prof.y + r.prof.h);
     box(px - 8, py - 8, px2 - px + 16, py2 - py + 16, "Professor");
-    const l = r.lms;
-    if (!l) return;
-    ctx.strokeStyle = "rgba(245,242,234,.85)";
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    for (const [a, c] of BONES) {
-      if (!seen(l[a]) || !seen(l[c])) continue;
-      const [x1, y1] = toScreen(l[a].x, l[a].y), [x2, y2] = toScreen(l[c].x, l[c].y);
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
-    ctx.fillStyle = AMBER;
-    for (const i of [15, 16].filter((i) => seen(l[i]))) {
-      const [x, y] = toScreen(l[i].x, l[i].y);
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, 7);
-      ctx.fill();
-    }
-  }
-
-  function track() {
-    const src = r.src!;
-    if (!r.pose) return;
-    if (src instanceof HTMLVideoElement) {
-      if (src.currentTime === r.lastVideoTime) return;
-      r.lastVideoTime = src.currentTime;
-    } else if (r.lastVideoTime === 0) return; // a still photo: once is enough
-    else r.lastVideoTime = 0;
-    const out = src instanceof HTMLVideoElement ? r.pose.detectForVideo(src, performance.now()) : r.pose.detect(src);
-    const people = out.landmarks.flatMap((l) => {
-      const v = l.filter(seen);
-      if (!v.length) return [];
-      const xs = v.map((p) => p.x), ys = v.map((p) => p.y), x = Math.min(...xs), y = Math.min(...ys);
-      return [{ x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y, l }];
-    });
-    const p = pickProfessor(people, r.board ?? FULL, r.prof);
-    r.prof = p;
-    r.lms = p?.l ?? null;
-    $("[data-prof]").classList.toggle("on", !!p);
-    $("[data-prof] b").textContent = p ? "tracking" : "finding";
   }
 
   function meter() {
@@ -310,7 +267,6 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
 
   function loop() {
     if (r.stopped) return;
-    track();
     if (!r.paused) {
       boardFrame();
       $("[data-clock]").textContent = mmss(elapsed());
@@ -320,23 +276,6 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     r.raf = requestAnimationFrame(loop);
   }
 
-  async function loadPose(mode: "VIDEO" | "IMAGE") {
-    const url = `${VISION}/vision_bundle.mjs`;
-    const { FilesetResolver, PoseLandmarker } = await import(/* webpackIgnore: true */ /* turbopackIgnore: true */ url);
-    const files = await FilesetResolver.forVisionTasks(`${VISION}/wasm`);
-    const make = (delegate: "GPU" | "CPU") =>
-      PoseLandmarker.createFromOptions(files, {
-        baseOptions: { modelAssetPath: MODEL, delegate },
-        runningMode: mode,
-        numPoses: 4,
-        minPoseDetectionConfidence: 0.4,
-        minTrackingConfidence: 0.4,
-      });
-    const pose: Pose = await make("GPU").catch(() => make("CPU"));
-    // Loaded on arrival: if the student already left, free its GPU and WASM memory instead of keeping it.
-    if (r.stopped) pose.close();
-    else r.pose = pose;
-  }
   const lock = async () => {
     try {
       r.wake = await navigator.wakeLock?.request("screen");
@@ -387,7 +326,7 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     await ac.resume().catch(() => {});
     startAudio(ac, stream);
     lock();
-    begin(video); // the pose model loads from mount and joins when ready (track() waits for it)
+    begin(video);
     // iOS can leave the AudioContext stopped: nothing reaches the tap. Say so while there is still a lecture to save.
     setTimeout(() => {
       if (r.stopped || r.paused || r.n || r.count || ask.current?.open) return;
@@ -400,11 +339,11 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     const still = $("img.still") as HTMLImageElement;
     if (!still.hidden) return; // already starting
     still.hidden = false;
-    // No pose model (offline CDN, old GPU) still records; only the Professor box is missing.
-    loadPose("IMAGE").catch((e) => console.warn("pose", e));
     await still.decode();
     begin(still);
-    setTimeout(() => setBoard(SAMPLE_BOARD), 1500); // as the live camera would: found a moment after the start
+    // As the live camera would: found a moment after the start. Only the still photo draws the Professor box: live,
+    // SAM's answer is seconds old and the professor has walked on.
+    setTimeout(() => (setBoard(SAMPLE_BOARD), setProf(SAMPLE_PROF), (r.prof = SAMPLE_PROF)), 1500);
   }
 
   function togglePause() {
@@ -421,8 +360,6 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
     r.stream?.getTracks().forEach((t) => t.stop());
     r.ac?.close().catch(() => {});
     r.wake?.release().catch(() => {});
-    r.pose?.close();
-    r.pose = null;
   }
 
   async function upload() {
@@ -466,13 +403,8 @@ export function Recorder({ course, userId, sample }: { course: string | null; us
   // Sample: start straight away. Unmount: let go of the camera, mic and wake lock.
   useEffect(() => {
     r.stopped = false; // dev Strict Mode runs this twice, with the cleanup between
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- its setState runs after the photo and the pose model load
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- its setState runs after the photo loads
     if (sample) startSample();
-    // ~15 MB of MediaPipe from the CDN: started on arrival so it is usually ready by the tap. Once, as Strict Mode runs this twice.
-    else if (!r.warm) {
-      r.warm = true;
-      loadPose("VIDEO").catch((e) => console.warn("pose", e));
-    }
     const onVisible = () => {
       if (document.visibilityState !== "visible" || r.stopped || !r.src) return;
       // iOS drops the wake lock and suspends audio in the background; take both back on return.

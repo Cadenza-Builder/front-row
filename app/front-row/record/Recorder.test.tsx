@@ -3,13 +3,9 @@ import { expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/supabase/browser", () => ({ createClient: () => ({ storage: { from: () => ({ upload: async () => ({ error: null }) }) } }) }));
-// The pose model never finishes loading: recording must start anyway.
-const forVisionTasks = vi.fn(() => new Promise(() => {}));
-const createFromOptions = vi.fn();
-vi.mock("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs", () => ({ FilesetResolver: { forVisionTasks }, PoseLandmarker: { createFromOptions } }));
 const { Recorder } = await import("./Recorder");
 
-it("starts recording before the pose model has loaded, and loads it once", async () => {
+it("starts recording with no board answer at all", async () => {
   const node = () => ({ connect: vi.fn(), fftSize: 0 });
   vi.stubGlobal("AudioContext", class {
     destination = {};
@@ -27,25 +23,9 @@ it("starts recording before the pose model has loaded, and loads it once", async
   vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url === "/api/lectures" ? { id: "L1", number: 1 } : { courses: [] }), { status: 201 })));
 
   render(<Recorder course="C1" userId="u1" sample={false} />);
-  await waitFor(() => expect(forVisionTasks).toHaveBeenCalledOnce()); // warmed on mount, before the tap
   fireEvent.click(screen.getByRole("button", { name: /Start Recording/ }));
   await waitFor(() => expect(screen.queryByRole("button", { name: /Start Recording|Starting/ })).toBeNull());
   expect((screen.getByRole("button", { name: "Stop" }) as HTMLButtonElement).disabled).toBe(false);
-  expect(forVisionTasks).toHaveBeenCalledOnce();
-  vi.unstubAllGlobals();
-});
-
-it("a model that lands after the student left is closed, not kept", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ courses: [] }))));
-  let land!: (m: unknown) => void;
-  forVisionTasks.mockResolvedValueOnce({});
-  createFromOptions.mockReturnValueOnce(new Promise((res) => (land = res)));
-  const { unmount } = render(<Recorder course="C1" userId="u1" sample={false} />);
-  await waitFor(() => expect(createFromOptions).toHaveBeenCalled());
-  unmount(); // went Back before the model finished
-  const close = vi.fn();
-  land({ close, detect: vi.fn(), detectForVideo: vi.fn() });
-  await waitFor(() => expect(close).toHaveBeenCalledOnce());
   vi.unstubAllGlobals();
 });
 
@@ -81,5 +61,80 @@ it("sends last: true only on the segment cut at Stop, then asks for the notes", 
   expect(body("/api/lectures/L1/segments/0")).toEqual({ frames: [] });
   expect(body("/api/lectures/L1/segments/1")).toEqual({ frames: [], last: true });
   expect(body("/api/lectures/L1/finish")).toEqual({ segmentCount: 2 });
+  vi.unstubAllGlobals();
+});
+
+it("live, the label follows SAM's answers (a no-board answer keeps the last one) and no box is drawn", async () => {
+  let tap!: { onaudioprocess: (e: unknown) => void };
+  const node = () => ({ connect: vi.fn(), fftSize: 0, frequencyBinCount: 0, getByteTimeDomainData: () => {} });
+  vi.stubGlobal("AudioContext", class {
+    destination = {};
+    sampleRate = 16000;
+    createMediaStreamSource = node;
+    createAnalyser = node;
+    createScriptProcessor = () => (tap = { connect: vi.fn() } as never);
+    resume = async () => {};
+    close = async () => {};
+  });
+  vi.stubGlobal("MediaStream", class {});
+  vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
+  // jsdom has no canvas: a 2d context that records fillText and answers the reads the frame loop makes.
+  const fillText = vi.fn();
+  const ctx = new Proxy({ fillText, measureText: () => ({ width: 0 }), getImageData: () => ({ data: new Uint8ClampedArray(32 * 18 * 4) }) } as Record<string, unknown>, {
+    get: (t, k) => (k in t ? t[k as string] : () => {}),
+    set: () => true,
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as never);
+  vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/jpeg;base64,");
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((cb) => cb(null));
+  Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", { get: () => 1280, configurable: true });
+  Object.defineProperty(HTMLVideoElement.prototype, "videoHeight", { get: () => 720, configurable: true });
+  Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia: vi.fn().mockResolvedValue({ getVideoTracks: () => [], getTracks: () => [] }) }, configurable: true });
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+  const board = { x: 0.1, y: 0.1, w: 0.6, h: 0.5 }, person = { x: 0.5, y: 0.3, w: 0.2, h: 0.5 };
+  const answers = [{ board, person }, { board: null, person: null }, { board, person: null }];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url === "/api/lectures") return new Response(JSON.stringify({ id: "L1", number: 1 }), { status: 201 });
+    if (url === "/api/lectures/L1/board") return new Response(JSON.stringify(answers.shift()));
+    return new Response(JSON.stringify({ courses: [] }), { status: 202 });
+  }));
+
+  const { container, unmount } = render(<Recorder course="C1" userId="u1" sample={false} />);
+  fireEvent.click(screen.getByRole("button", { name: /Start Recording/ }));
+  const label = () => container.querySelector("[data-prof] b")!.textContent;
+  // The ask at the start, then one per push: 121 s of audio passes RECHECK.
+  const next = () => tap.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(121 * 16000) } });
+  await waitFor(() => expect(label()).toBe("tracking"));
+  expect(container.querySelector("[data-prof]")!.classList.contains("on")).toBe(true);
+  next();
+  await waitFor(() => expect(answers).toHaveLength(1)); // the no-board answer landed
+  await new Promise((res) => setTimeout(res, 50));
+  expect(label()).toBe("tracking");
+  next();
+  await waitFor(() => expect(label()).toBe("finding"));
+  expect(fillText).not.toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number));
+  unmount();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("the sample photo draws SAM's Professor box, for the demo", async () => {
+  vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
+  const fillText = vi.fn();
+  const ctx = new Proxy({ fillText, measureText: () => ({ width: 0 }), getImageData: () => ({ data: new Uint8ClampedArray(32 * 18 * 4) }) } as Record<string, unknown>, {
+    get: (t, k) => (k in t ? t[k as string] : () => {}),
+    set: () => true,
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx as never);
+  Object.defineProperty(HTMLImageElement.prototype, "decode", { value: async () => {}, configurable: true });
+  Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", { get: () => 1280, configurable: true });
+  Object.defineProperty(HTMLImageElement.prototype, "naturalHeight", { get: () => 854, configurable: true });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ courses: [] }))));
+
+  const { container, unmount } = render(<Recorder course={null} userId={null} sample />);
+  await waitFor(() => expect(fillText).toHaveBeenCalledWith("Professor", expect.any(Number), expect.any(Number)), { timeout: 3000 });
+  expect(container.querySelector("[data-prof] b")!.textContent).toBe("tracking");
+  unmount();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

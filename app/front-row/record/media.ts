@@ -63,16 +63,3 @@ export function overlap(a: Box, b: Box) {
   const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)), y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
   return (x * y) / (b.w * b.h);
 }
-
-/**
- * On the phone: someone standing at the board. Their head must be above the board's lowest 15%, which leaves out the
- * front rows seen from the back; nobody qualifies means nobody is outlined. The tallest (standing at the board) wins;
- * `last` only breaks a near tie (within 20% of the tallest), so a student picked while the professor was away does not
- * keep the outline (the server's pickProfessor in lib/lecture/locate.ts differs).
- */
-export function pickProfessor<P extends Box>(people: P[], board: Box, last: Box | null): P | null {
-  const up = people.filter((p) => p.y < board.y + board.h * 0.85);
-  const tall = Math.max(...up.map((p) => p.h)), mid = (b: Box) => b.x + b.w / 2;
-  const near = up.filter((p) => p.h >= tall * 0.8);
-  return near.sort(last ? (a, b) => Math.abs(mid(a) - mid(last)) - Math.abs(mid(b) - mid(last)) : (a, b) => b.h - a.h)[0] ?? null;
-}

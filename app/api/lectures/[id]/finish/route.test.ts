@@ -2,11 +2,10 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { fakeClient } from "@/lib/lectures/fakeClient";
 
-const h = vi.hoisted(() => ({ db: null as unknown, processSegment: vi.fn(), finishLecture: vi.fn(), indexFiles: vi.fn() }));
+const h = vi.hoisted(() => ({ db: null as unknown, processSegment: vi.fn(), finishLecture: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => h.db }));
 vi.mock("@/lib/supabase/server", () => ({ getUser: async () => ({ supabase: h.db, userId: ME }) }));
 vi.mock("@/lib/lecture/pipeline", () => ({ processSegment: h.processSegment, finishLecture: h.finishLecture }));
-vi.mock("@/lib/companion/search", () => ({ indexFiles: h.indexFiles }));
 
 import { POST } from "./route";
 

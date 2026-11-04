@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { downsample, encodeWav, missingSegments, pickProfessor, startLecture } from "./media";
+import { downsample, encodeWav, missingSegments, startLecture } from "./media";
 
 describe("media", () => {
   it("encodeWav writes a 44-byte header with rate 16000 and the right length", async () => {
@@ -48,32 +48,5 @@ describe("media", () => {
     expect(await startLecture("C1", async () => false)).toBeNull();
     expect(fetchMock).toHaveBeenCalledOnce();
     vi.unstubAllGlobals();
-  });
-
-  describe("pickProfessor", () => {
-    const board = { x: 0.04, y: 0.08, w: 0.78, h: 0.6 }; // bottom edge at 0.68
-    const prof = { x: 0.3, y: 0.2, w: 0.1, h: 0.6 }; // standing at the board
-    const student = { x: 0.4, y: 0.7, w: 0.08, h: 0.25 }; // a front-row head and shoulders, seen from the back
-
-    it("keeps the professor who steps beside the board over a student in front of it", () => {
-      const beside = { ...prof, x: 0.85 };
-      expect(pickProfessor([student, beside], board, null)).toBe(beside);
-    });
-    it("outlines nobody when only students are in view", () => {
-      expect(pickProfessor([student, { ...student, x: 0.6, y: 0.64 }], board, null)).toBeNull();
-    });
-    it("takes the tallest standing person first", () => {
-      const short = { x: 0.6, y: 0.15, w: 0.06, h: 0.2 };
-      expect(pickProfessor([short, prof], board, null)).toBe(prof);
-    });
-    it("does not stay locked on a student who was picked while the professor was away", () => {
-      const aisle = { x: 0.7, y: 0.3, w: 0.06, h: 0.3 }; // the last pick, a student who stood up, has sat down; the professor is back
-      expect(pickProfessor([prof], board, aisle)).toBe(prof);
-      expect(pickProfessor([prof, { ...aisle, x: 0.68 }], board, aisle)).toBe(prof); // the student is still up, nearest the last pick
-    });
-    it("stays with the person nearest the last pick", () => {
-      const tall = { x: 0.6, y: 0.1, w: 0.1, h: 0.7 };
-      expect(pickProfessor([tall, prof], board, { ...prof, x: 0.32 })).toBe(prof);
-    });
   });
 });
