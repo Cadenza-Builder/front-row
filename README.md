@@ -136,7 +136,6 @@ Front Row makes the notes; Cadenza shows and stores them. The pieces of Cadenza 
 | `MathText`, the lesson page's reading bar and graph | showing math and graphs on the notes screen |
 | Word export (`papers/docx`) | Download as Word |
 | File reading (`extract/*`) | reading an uploaded syllabus PDF |
-| Search index (`companion/search`) | Add to Cadenza: the notes become searchable in a Cadenza week |
 | Run log (`runs`, `runTokens`) | logging each run's token usage |
 
 Front Row also changed a few Cadenza files this week, which stay in Cadenza's private repo: the sign-in screen's Front Row wording, the redirect back to Front Row after sign-in, the route guard that keeps Front Row invite-only, the site nav button and the admin list of access requests.
