@@ -70,7 +70,7 @@ Measured from call and token counts at Meta's list prices:
 | Same lecture, after the first round of fixes | 197 | 506 | about $4.33 |
 | MIT 18.06, 10 min: before → after settled + cropped reads | 41 → 20 | 92 → 92 | board-read output tokens halved (156k → 78k) |
 
-A full 47-minute lecture through the phone app comes to about $2.60, pricing SAM at $0.0025 per call (see Known limits for why that may be low).
+A full 47-minute lecture through the phone app comes to about $2.60, pricing SAM at $0.0025 per call (see Known limits for why that may be low). At that rate a two-hour lecture is about $6.60.
 
 These are estimates, not a bill. The next cut is SAM: on a phone that doesn't move, the board only needs finding again after a big picture change.
 
@@ -87,6 +87,23 @@ These are estimates, not a bill. The next cut is SAM: on a phone that doesn't mo
 | Lecture with no board | notes from the transcript alone |
 | Meta call stalls | the frame is skipped, the lecture finishes |
 | Long writing without a pause | read every 30 s |
+| Chalkboard (MIT 18.06) | found and read; see [`samples/`](samples/mit-18.06-lecture-3/) |
+| Whiteboard (our own 14-minute recording, Nov 3, the one in the demo video) | notes in two sections plus a summary, linked to 14 board photos |
+| Slides on a projector screen (Stanford CS229, lecture 1) | the screen is found; blank slides come back empty, which costs calls but adds nothing wrong to the notes |
+| Messy handwriting | by design, anything the reader can't make out comes back as `[unreadable]` (`board.ts`), never a guess |
+
+## The numbers in the video (tentative)
+
+Each figure in the demo video, what it rests on, and what it assumes. All of them come from a handful of runs, so treat them as early results, not benchmarks.
+
+| In the video | What it rests on | Assumptions and gaps |
+|---|---|---|
+| A paid note-taker costs about $19 for a two-hour session | The average of published paid note-taker rates at five schools (Exeter, Auckland, Stetson, Tennessee, Towson) | Pay only, without hiring, training or admin. Rates vary by school. |
+| Front Row costs about $6.60 for two hours | The 47-minute phone-app run ($2.60), scaled to 120 minutes | Meta list prices applied to our call and token counts, not a bill. SAM may cost up to 4× more (Known limits). A board that changes more often costs more. |
+| Notes arrive about a minute and a half after Stop | Draft 1:22 and 1:26 after Stop on 6- and 15-minute lectures; final notes 1:56 and 2:06 | Not yet timed on a two-hour lecture. Parts are processed during recording, so Stop leaves only the last part and the writing, but a longer lecture has more topics to write, so expect the draft later. |
+| "Ninety-nine percent" | Speech to text across five accents: 1–5% real word errors against the lectures' human captions, so 95–99% of words right. 99% is the top of that range. | Only speech was scored as a percentage. Chalkboard, whiteboard, projector and messy writing were run (above) but not scored. |
+| SAM calls cut by about half | Oxford, 58 minutes: 1,392 → 506 SAM calls (−64%) after the first round of fixes. Reading only settled boards then halved board reads on MIT 18.06 (41 → 20). | Two different cuts, one lecture each. The settled-reads change did not reduce SAM calls (92 → 92). |
+| 30 out of 30 key topics, every example from the board | Oxford, 58 minutes: 30 of 30 two-minute parts processed, the sections cover the whole hour, and every worked answer we checked was correct | "Topics" here means the 30 two-minute parts. One lecture, checked by us, not blind-scored. |
 
 ## Known limits
 
