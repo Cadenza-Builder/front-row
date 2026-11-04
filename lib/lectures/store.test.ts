@@ -252,20 +252,22 @@ const FRAME = { frame: "data:image/jpeg;base64,/9j/AAAA" };
 // A lecture started a minute ago: the seed's is days old, past the six-hour ceiling.
 const live = () => { const db = fakeClient(seed()); h.admin = db.client; db.tables.lectures[0].started_at = new Date(Date.now() - 60_000).toISOString(); return db; };
 
-test("findBoard returns SAM's board as fractions of the frame", async () => {
+test("findBoard returns SAM's board and professor as fractions of the frame", async () => {
   const db = live();
-  h.locate.mockResolvedValue({ board: { x1: 64, y1: 36, x2: 576, y2: 288, w: 640, h: 360 }, person: null });
+  h.locate.mockResolvedValue({ board: { x1: 64, y1: 36, x2: 576, y2: 288, w: 640, h: 360 }, person: { x1: 320, y1: 72, x2: 384, y2: 324, w: 640, h: 360 } });
   const out = await findBoard(db.client, ME, LEC, FRAME);
   expect(h.locate).toHaveBeenCalledWith(FRAME.frame);
   expect(out.code).toBe(200);
   const b = out.body.board as Record<string, number>;
   expect([b.x, b.y, b.w, b.h].map((v) => +v.toFixed(3))).toEqual([0.1, 0.1, 0.8, 0.7]);
+  const p = out.body.person as Record<string, number>;
+  expect([p.x, p.y, p.w, p.h].map((v) => +v.toFixed(3))).toEqual([0.5, 0.2, 0.1, 0.7]);
 });
 
-test("findBoard says null when SAM finds no board", async () => {
+test("findBoard says null for both when SAM finds no board", async () => {
   const db = live();
   h.locate.mockResolvedValue({ board: null, person: null });
-  expect(await findBoard(db.client, ME, LEC, FRAME)).toEqual({ code: 200, body: { board: null } });
+  expect(await findBoard(db.client, ME, LEC, FRAME)).toEqual({ code: 200, body: { board: null, person: null } });
 });
 
 test("findBoard spends nothing on someone else's lecture, one not recording, or a body that is not a JPEG", async () => {

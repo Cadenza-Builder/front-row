@@ -40,7 +40,9 @@ It prints the notes as markdown, then `Meta API calls:` with the count per model
 
 All four run on Meta's hosted Model API. The calls go through the `openai` npm package as an HTTP client pointed at `https://api.meta.ai/v1` (`lib/lecture/meta.ts`). No OpenAI model is called anywhere.
 
-One model that is not Meta's runs in the phone app only: Google's MediaPipe Pose Landmarker (lite), in the phone's browser (`app/front-row/record/Recorder.tsx`). It draws the professor's outline on screen and skips a board photo while the professor covers over 35% of the board. It sends nothing anywhere. `npm run notes` does not use it.
+Every model Front Row calls is Meta's. In the phone app, the professor's box on screen is SAM 3.1's answer to the board check (`lib/lectures/store.ts`).
+
+The demo video was filmed on Nov 3 with an earlier build that drew the professor's outline with Google's MediaPipe. Per the organizers' ruling it was replaced on Nov 4 with SAM 3.1's professor box.
 
 ## How it works
 

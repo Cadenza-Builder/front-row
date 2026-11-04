@@ -5,7 +5,7 @@ import { refused } from "@/lib/billing/plans";
 import { indexFiles } from "@/lib/companion/search";
 import type { Snapshot } from "@/lib/lecture/board";
 import { toMarkdown, type Notes } from "@/lib/lecture/compose";
-import { locate } from "@/lib/lecture/locate";
+import { locate, type Box } from "@/lib/lecture/locate";
 import { finishLecture, processSegment } from "@/lib/lecture/pipeline";
 import { runTokens } from "@/lib/openai/client";
 import { SOMETHING_WRONG } from "@/lib/runs/startRun";
@@ -126,9 +126,9 @@ export async function findBoard(supabase: Db, userId: string, id: string, input:
   // Past the six-hour ceiling a lecture left recording is not a lecture anymore, so it stops buying SAM calls.
   // shortcut: no per-lecture count of asks; add one (a column, as lastSegment bounds segments) before Front Row is public.
   if (lecture.status !== "recording" || lastSegment(lecture) >= MAX_SEGMENTS) return { code: 409, body: { error: "This lecture is no longer recording." } };
-  // shortcut: locate also asks SAM for the person (4 calls, not 3); a board-only call lands with lib/lecture's P1 work.
-  const { board: b } = await locate(parsed.data.frame);
-  return { code: 200, body: { board: b && { x: b.x1 / b.w, y: b.y1 / b.h, w: (b.x2 - b.x1) / b.w, h: (b.y2 - b.y1) / b.h } } };
+  const { board, person } = await locate(parsed.data.frame);
+  const frac = (b: Box | null) => b && { x: b.x1 / b.w, y: b.y1 / b.h, w: (b.x2 - b.x1) / b.w, h: (b.y2 - b.y1) / b.h };
+  return { code: 200, body: { board: frac(board), person: frac(person) } };
 }
 
 export async function saveSegment(supabase: Db, userId: string, id: string, nParam: string, input: unknown): Promise<Reply> {
