@@ -72,7 +72,7 @@ export async function readBoard(frame: Frame & { board: Box }, turns: Turn[]): P
         type: "json_schema",
         name: "board_reading",
         strict: true,
-        // Strict mode rejects maxLength (lib/openai/client.ts), so the 200 cap is enforced by the parse below.
+        // Strict mode rejects maxLength, so the 200 cap is enforced by the parse below.
         schema: z.toJSONSchema(BoardReading.extend({ alt: z.string() }), { target: "draft-7" }) as Record<string, unknown>,
       },
     },
